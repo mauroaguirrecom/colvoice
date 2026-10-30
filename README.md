@@ -15,6 +15,8 @@ ColVoice es una aplicación local optimizada para generar, clonar y transformar 
 
 Voice Changer es opcional: descarga Seed-VC desde su proyecto upstream y colócalo en `vendor/seed-vc/` siguiendo [VOICE-CHANGER.md](VOICE-CHANGER.md). El repositorio no redistribuye código de terceros sin verificar ni archivos multimedia de ejemplo.
 
+Consulta [INSTALACION.md](INSTALACION.md) para la instalación completa con NVIDIA/CUDA o CPU, descarga de modelos, uso de la API, clonación con texto pronunciado opcional y control de generación.
+
 ## Funciones
 
 - Texto a voz con español colombiano como configuración inicial.
