@@ -38,7 +38,7 @@ Users write or paste scripts, upload short clean voice references, generate audi
 - Short brand: ColVoice.
 - Upstream engine: OmniVoice, credited in the public repository and license files.
 - Primary interface language: Spanish.
-- ElevenLabs is the requested benchmark for operational clarity and editing flow; the product keeps its own name and local-first identity.
+- ColVoice mantiene una identidad propia, local y enfocada en la claridad del flujo de generación.
 
 ## Evidence on Hand
 
