@@ -1661,7 +1661,7 @@ def build_demo(
                 <div class="sidebar-brand">
                     <span class="studio-mark" aria-label="Logo ColVoice"><strong>CV</strong><i></i><i></i></span>
                     <div>
-                        <div class="studio-name">{_BRAND_NAME}</div>
+                        <div class="studio-name">ColVoice</div>
                         <div class="studio-subtitle">Studio local</div>
                     </div>
                 </div>
@@ -1698,7 +1698,7 @@ def build_demo(
                 """
                 <header class="studio-topbar">
                     <div>
-                        <strong>{_BRAND_TITLE}</strong>
+                        <strong>ColVoice — Voz Colombiana</strong>
                         <span>Creación y conversión de voz</span>
                     </div>
                     <span class="privacy-badge">100% Local & Privado</span>
