@@ -1,7 +1,7 @@
-# OmniVoice 🌍
+# ColVoice — Voz Colombiana
 
 <p align="center">
-  <img width="200" height="200" alt="OmniVoice" src="https://zhu-han.github.io/omnivoice/pics/omnivoice.jpg" />
+  <img width="160" height="160" alt="ColVoice" src="../assets/colvoice-mark.svg" />
 </p>
 
 <p align="center">
@@ -16,7 +16,7 @@
   <a href="https://colab.research.google.com/github/k2-fsa/OmniVoice/blob/master/docs/OmniVoice.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
 </p>
 
-OmniVoice is a state-of-the-art massively multilingual zero-shot text-to-speech (TTS) model supporting over 600 languages. Built on a novel diffusion language model-style architecture, it generates high-quality speech with superior inference speed, supporting voice cloning and voice design.
+ColVoice is the Spanish-first application layer for local text-to-speech, voice cloning and voice design. It uses the OmniVoice engine underneath, preserving the upstream Python package and model identifiers for compatibility while presenting the public product as ColVoice.
 
 **Contents**: [Key Features](#key-features) | [Installation](#installation) | [Quick Start](#quick-start) | [Python API](#python-api) | [Command-Line Tools](#command-line-tools) | [Training & Evaluation](#training--evaluation) | [Discussion](#discussion--communication) | [Citation](#citation)
 

@@ -1,5 +1,7 @@
 # ColVoice — Voz Colombiana
 
+<p align="center"><img width="128" height="128" alt="ColVoice" src="assets/colvoice-mark.svg" /></p>
+
 Aplicación local en español para generar voz, clonar referencias, convertir grabaciones y diseñar perfiles de voz. Todo el procesamiento se ejecuta en el equipo mediante una interfaz Gradio.
 
 ## Inicio rápido

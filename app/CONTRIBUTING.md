@@ -1,6 +1,6 @@
-# Contributing to OmniVoice
+# Contributing to ColVoice
 
-Thank you for your interest in contributing to OmniVoice! We use pre-commit hooks to ensure code quality and consistency. Before contributing, please follow these guidelines to enable and use the pre-commit hooks.
+Thank you for your interest in contributing to ColVoice! The app uses the OmniVoice engine internally and keeps its upstream package names for compatibility. We use pre-commit hooks to ensure code quality and consistency. Before contributing, please follow these guidelines to enable and use the pre-commit hooks.
 
 ## Setup
 
