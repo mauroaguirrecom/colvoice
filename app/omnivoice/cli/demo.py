@@ -50,8 +50,8 @@ from omnivoice.utils.lang_map import LANG_NAMES, lang_display_name
 # ---------------------------------------------------------------------------
 _ALL_LANGUAGES = ["Auto"] + sorted(lang_display_name(n) for n in LANG_NAMES)
 _DEFAULT_LANGUAGE = "Spanish"
-_BRAND_NAME = "MAGI Eleven"
-_BRAND_TITLE = "MAGI Eleven Studio"
+_BRAND_NAME = "ColVoice"
+_BRAND_TITLE = "ColVoice — Voz Colombiana"
 
 
 # ---------------------------------------------------------------------------
@@ -286,7 +286,7 @@ def build_demo(
                             f"La voz '{name}' usa una referencia de "
                             f"{reference_info.duration:.1f} segundos. "
                             "Su texto manual no puede alinearse después de recortarla. "
-                            "Deja el texto vacío para que MAGI Eleven lo transcriba automáticamente."
+                            "Deja el texto vacío para que ColVoice lo transcriba automáticamente."
                         )
                     reference_path = str(voice_library / reference_filename)
                     # Older profiles may contain the complete long recording in
@@ -457,7 +457,7 @@ def build_demo(
                         raise ValueError(
                             "La referencia supera 20 segundos y el texto manual ya no "
                             "quedaría alineado al recorte automático. Déjalo vacío para "
-                            "que MAGI Eleven lo transcriba, o usa un clip corto."
+                            "que ColVoice lo transcriba, o usa un clip corto."
                         )
                     prompt = model.create_voice_clone_prompt(
                         ref_audio=valid_ref_audio,
@@ -532,7 +532,7 @@ def build_demo(
         if manual_transcript and sf.info(ref_audio).duration > 20:
             raise ValueError(
                 "La referencia supera 20 segundos y el texto manual ya no quedaría "
-                "alineado al recorte automático. Déjalo vacío para que MAGI Eleven "
+                "alineado al recorte automático. Déjalo vacío para que ColVoice "
                 "lo transcriba, o usa un clip corto."
             )
         # Passing None is intentional: OmniVoice trims long recordings and then
@@ -726,7 +726,7 @@ def build_demo(
                 shutil.copy2(generated_files[0], final_path)
             finally:
                 if original_device.type == "cuda":
-                    progress(0.92, desc="Restaurando MAGI Eleven en la GPU")
+                    progress(0.92, desc="Restaurando ColVoice en la GPU")
                     torch.cuda.empty_cache()
                     _move_speech_model(original_device)
                 shutil.rmtree(job_dir, ignore_errors=True)
@@ -1864,7 +1864,7 @@ def build_demo(
                                 elem_classes="compact-audio",
                             )
                             gr.HTML(
-                                "<p class='field-note'>Ideal: 3 a 10 segundos, sin música ni eco. Si cargas una grabación larga, MAGI Eleven recorta un fragmento limpio y lo transcribe automáticamente.</p>"
+                                "<p class='field-note'>Ideal: 3 a 10 segundos, sin música ni eco. Si cargas una grabación larga, ColVoice recorta un fragmento limpio y lo transcribe automáticamente.</p>"
                             )
                             vc_ref_text = gr.Textbox(
                                 label="Texto pronunciado en la referencia (opcional)",
@@ -2632,7 +2632,7 @@ def build_demo(
                             elem_classes="compact-audio",
                         )
                         gr.HTML(
-                            "<p class='field-note'>Puedes cargar una grabación larga; se conserva en tu biblioteca y MAGI Eleven usa un fragmento corto para clonar la voz.</p>"
+                            "<p class='field-note'>Puedes cargar una grabación larga; se conserva en tu biblioteca y ColVoice usa un fragmento corto para clonar la voz.</p>"
                         )
                         library_voice_name = gr.Textbox(
                             label="Nombre",

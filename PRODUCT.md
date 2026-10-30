@@ -12,7 +12,7 @@ The primary user is a Spanish-speaking creator or professional producing narrati
 
 ## Product Purpose
 
-MAGI Eleven Studio turns text or an existing recording into speech, either from a cloned reference voice or from a designed voice profile. Success means reaching a usable audio result quickly while keeping voice data and generation on the local machine.
+ColVoice turns text or an existing recording into speech, either from a cloned reference voice or from a designed voice profile. Success means reaching a usable audio result quickly while keeping voice data and generation on the local machine.
 
 ## Positioning
 
@@ -34,8 +34,8 @@ Users write or paste scripts, upload short clean voice references, generate audi
 
 ## Brand Commitments
 
-- Product name: MAGI Eleven Studio.
-- Short brand: MAGI Eleven.
+- Product name: ColVoice — Voz Colombiana.
+- Short brand: ColVoice.
 - Upstream engine: OmniVoice, credited in the public repository and license files.
 - Primary interface language: Spanish.
 - ElevenLabs is the requested benchmark for operational clarity and editing flow; the product keeps its own name and local-first identity.

@@ -1,8 +1,8 @@
-# MAGI Eleven Studio design system
+# ColVoice design system
 
 ## Direction
 
-MAGI Eleven Studio is a calm production workspace inspired by modern audio editors. It uses a warm light canvas, white working surfaces, near-black actions, restrained violet accents, and clear Spanish copy. The interface should feel focused and trustworthy during repeated generation work.
+ColVoice is a calm production workspace inspired by modern audio editors. It uses a warm light canvas, white working surfaces, near-black actions, restrained violet accents, and clear Spanish copy. The interface should feel focused and trustworthy during repeated generation work.
 
 ## Layout
 

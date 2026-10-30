@@ -1,4 +1,4 @@
-# MAGI Eleven Studio
+# ColVoice — Voz Colombiana
 
 Aplicación local en español para generar voz, clonar referencias, convertir grabaciones y diseñar perfiles de voz. Todo el procesamiento se ejecuta en el equipo mediante una interfaz Gradio.
 
@@ -6,10 +6,10 @@ Aplicación local en español para generar voz, clonar referencias, convertir gr
 
 1. Descarga o prepara el modelo en `models/` con `download_models.py`.
 2. Instala las dependencias locales indicadas en `requirements-local.txt`.
-3. Ejecuta `Iniciar-MAGI-Eleven.cmd`.
+3. Ejecuta `Iniciar-ColVoice.cmd`.
 4. Abre `http://127.0.0.1:8001`.
 
-La marca corta es **MAGI Eleven**. El paquete Python interno conserva `omnivoice` para mantener compatibilidad con el motor base.
+ColVoice es una aplicación local optimizada para generar, clonar y transformar voces con español colombiano, mexicano y latinoamericano. El paquete Python interno conserva `omnivoice` para mantener compatibilidad con el motor base.
 
 Voice Changer es opcional: descarga Seed-VC desde su proyecto upstream y colócalo en `vendor/seed-vc/` siguiendo [VOICE-CHANGER.md](VOICE-CHANGER.md). El repositorio no redistribuye código de terceros sin verificar ni archivos multimedia de ejemplo.
 
