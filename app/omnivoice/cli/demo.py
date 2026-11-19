@@ -656,7 +656,7 @@ def build_demo(
                     # their prompt. Rebuild those prompts through OmniVoice's
                     # official optional-ref_text path so it trims and transcribes
                     # a clean segment before tokenization.
-                    if reference_info.duration > 20 and manual_text_flag is not True:
+                    if reference_info.duration > 20 and manual_text_flag is None:
                         prompt = model.create_voice_clone_prompt(
                             ref_audio=reference_path,
                             ref_text=None,
@@ -761,6 +761,27 @@ def build_demo(
                 "en la muestra y vuelve a guardarla."
             )
 
+    def _prepare_reference(ref_audio, ref_text):
+        valid_ref_audio = _validate_reference_audio_file(ref_audio)
+        reference_text = (ref_text or "").strip() or None
+        if reference_text and sf.info(valid_ref_audio).duration > 20:
+            raise ValueError(
+                "La referencia supera 20 segundos y el texto manual ya no "
+                "quedaría alineado al recorte automático. Déjalo vacío para "
+                "que ColVoice lo transcriba, o usa un clip corto."
+            )
+        prompt = model.create_voice_clone_prompt(
+            ref_audio=valid_ref_audio,
+            ref_text=reference_text,
+        )
+        if reference_text:
+            _validate_reference_alignment(
+                prompt,
+                reference_text,
+                valid_ref_audio,
+            )
+        return prompt
+
     # -- shared generation core --
     def _gen_core(
         text,
@@ -824,25 +845,7 @@ def build_demo(
                         "Selecciona una voz guardada o carga un audio de referencia."
                     )
                 else:
-                    valid_ref_audio = _validate_reference_audio_file(ref_audio)
-                    reference_text = (ref_text or "").strip() or None
-                    if reference_text and sf.info(valid_ref_audio).duration > 20:
-                        raise ValueError(
-                            "La referencia supera 20 segundos y el texto manual ya no "
-                            "quedaría alineado al recorte automático. Déjalo vacío para "
-                            "que ColVoice lo transcriba, o usa un clip corto."
-                        )
-                    prompt = model.create_voice_clone_prompt(
-                        ref_audio=valid_ref_audio,
-                        ref_text=reference_text,
-                    )
-                    if reference_text:
-                        _validate_reference_alignment(
-                            prompt,
-                            reference_text,
-                            valid_ref_audio,
-                        )
-                    kw["voice_clone_prompt"] = prompt
+                    kw["voice_clone_prompt"] = _prepare_reference(ref_audio, ref_text)
 
             if instruct and instruct.strip():
                 kw["instruct"] = instruct.strip()
@@ -1258,807 +1261,13 @@ def build_demo(
     # =====================================================================
     # UI
     # =====================================================================
-    theme = gr.themes.Soft(
-        primary_hue="indigo",
-        secondary_hue="violet",
-        neutral_hue="slate",
-        font=["IBM Plex Sans", "Inter", "Segoe UI", "sans-serif"],
-    ).set(
-        body_background_fill="#07090e",
-        body_text_color="#f8fafc",
-        background_fill_primary="#0e131f",
-        background_fill_secondary="#141b2d",
-        border_color_primary="rgba(255, 255, 255, 0.08)",
-        block_background_fill="#0e131f",
-        block_border_color="rgba(255, 255, 255, 0.08)",
-        block_label_background_fill="transparent",
-        block_label_text_color="#94a3b8",
-        input_background_fill="#080b12",
-        input_border_color="rgba(255, 255, 255, 0.1)",
-        button_primary_background_fill="linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #a855f7 100%)",
-        button_primary_background_fill_hover="linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #9333ea 100%)",
-        button_primary_text_color="#ffffff",
-        button_secondary_background_fill="#141b2d",
-        button_secondary_border_color="rgba(255, 255, 255, 0.1)",
-        button_secondary_text_color="#e2e8f0",
-    )
-    css = """
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
-    :root, .dark {
-        --ov-bg: #07090e;
-        --ov-surface: #0e131f;
-        --ov-surface-elevated: #141b2d;
-        --ov-surface-hover: #1a233a;
-        --ov-border: rgba(255, 255, 255, 0.08);
-        --ov-border-focus: #6366f1;
-        --ov-text-primary: #f8fafc;
-        --ov-text-secondary: #94a3b8;
-        --ov-text-muted: #64748b;
-        --ov-accent: #6366f1;
-        --ov-accent-glow: rgba(99, 102, 241, 0.35);
-        --ov-sidebar-width: 240px;
-        --ov-player-height: 80px;
-        
-        --body-background-fill: #07090e !important;
-        --body-text-color: #f8fafc !important;
-        --background-fill-primary: #0e131f !important;
-        --background-fill-secondary: #141b2d !important;
-        --border-color-primary: rgba(255, 255, 255, 0.08) !important;
-        --block-background-fill: #0e131f !important;
-        --block-border-color: rgba(255, 255, 255, 0.08) !important;
-        --block-label-background-fill: transparent !important;
-        --block-label-text-color: #94a3b8 !important;
-        --input-background-fill: #080b12 !important;
-        --input-border-color: rgba(255, 255, 255, 0.1) !important;
-        --button-primary-background-fill: #6366f1 !important;
-        --button-primary-text-color: #ffffff !important;
-        --button-secondary-background-fill: #141b2d !important;
-        --button-secondary-border-color: rgba(255, 255, 255, 0.1) !important;
-        --button-secondary-text-color: #e2e8f0 !important;
-        color-scheme: dark !important;
-    }
-
-    html, body {
-        background: #07090e !important;
-        color: #f8fafc !important;
-        font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-        overflow-x: hidden !important;
-        margin: 0;
-        padding: 0;
-    }
-
-    ::selection {
-        background: rgba(99, 102, 241, 0.35);
-        color: #ffffff;
-    }
-
-    * {
-        scrollbar-color: #26334d #07090e;
-        scrollbar-width: thin;
-    }
-
-    .gradio-container {
-        max-width: none !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        width: 100% !important;
-        background: #07090e radial-gradient(at 10% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-                    radial-gradient(at 90% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%) !important;
-        color: #f8fafc !important;
-        min-height: 100vh !important;
-    }
-
-    .gradio-container > .main {
-        width: 100% !important;
-        max-width: none !important;
-        padding: 0 !important;
-    }
-
-    .gradio-container .sidebar-parent {
-        width: 100% !important;
-        padding-left: var(--ov-sidebar-width) !important;
-    }
-
-    /* ==============================================================
-       SIDEBAR
-       ============================================================== */
-    #studio-sidebar {
-        width: var(--ov-sidebar-width) !important;
-        left: 0 !important;
-        top: 0 !important;
-        bottom: 0 !important;
-        transform: none !important;
-        padding: 24px 14px calc(var(--ov-player-height) + 20px) !important;
-        background: rgba(10, 14, 24, 0.88) !important;
-        backdrop-filter: blur(20px) !important;
-        -webkit-backdrop-filter: blur(20px) !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
-        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4) !important;
-        z-index: 25 !important;
-    }
-
-    #studio-sidebar > button {
-        display: none !important;
-    }
-
-    .sidebar-brand {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 4px 8px 24px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .studio-mark {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 2px;
-        width: 38px;
-        height: 38px;
-        border-radius: 12px;
-        background: linear-gradient(135deg, #0ea5a4 0%, #2563eb 100%);
-        box-shadow: 0 0 16px rgba(14, 165, 164, 0.42);
-        flex: 0 0 auto;
-    }
-
-    .studio-mark strong {
-        color: #ffffff;
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: -0.08em;
-        line-height: 1;
-    }
-
-    .studio-mark i {
-        display: block;
-        width: 3px;
-        border-radius: 3px;
-        background: #ffffff;
-        animation: studio-wave 1.4s ease-in-out infinite alternate;
-    }
-    .studio-mark i:nth-child(1) { height: 10px; animation-delay: 0.1s; }
-    .studio-mark i:nth-child(2) { height: 20px; animation-delay: 0.3s; }
-    .studio-mark i:nth-child(3) { height: 14px; animation-delay: 0.2s; }
-    .studio-mark i:nth-child(4) { height: 8px; animation-delay: 0.4s; }
-
-    @keyframes studio-wave {
-        0% { transform: scaleY(0.7); opacity: 0.8; }
-        100% { transform: scaleY(1.3); opacity: 1; }
-    }
-
-    .studio-name {
-        font-size: 17px;
-        font-weight: 800;
-        letter-spacing: -0.02em;
-        background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-
-    .studio-subtitle {
-        margin-top: 2px;
-        font-size: 11px;
-        font-weight: 600;
-        color: #818cf8;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-    }
-
-    .sidebar-label {
-        margin: 24px 10px 10px;
-        color: #64748b;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-    }
-
-    #studio-nav {
-        border: 0 !important;
-        background: transparent !important;
-        padding: 0 !important;
-        width: 100% !important;
-        box-shadow: none !important;
-    }
-
-    #studio-nav [data-testid="block-info"] {
-        display: none !important;
-    }
-
-    #studio-nav .wrap {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 6px !important;
-        width: 100% !important;
-    }
-
-    #studio-nav label {
-        display: flex !important;
-        align-items: center !important;
-        min-height: 44px !important;
-        padding: 0 14px !important;
-        border: 1px solid transparent !important;
-        border-radius: 10px !important;
-        background: transparent !important;
-        color: #94a3b8 !important;
-        font-size: 14px !important;
-        font-weight: 600 !important;
-        cursor: pointer !important;
-        transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1) !important;
-        box-sizing: border-box !important;
-    }
-
-    #studio-nav label:nth-child(1)::before { content: "🎙️"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(2)::before { content: "💬"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(3)::before { content: "🧹"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(4)::before { content: "🔄"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(5)::before { content: "⚡"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(6)::before { content: "🎨"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(7)::before { content: "📁"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(8)::before { content: "🔎"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(9)::before { content: "⚙️"; font-size: 15px; margin-right: 10px; }
-
-    #studio-nav label:hover {
-        background: rgba(255, 255, 255, 0.05) !important;
-        color: #f1f5f9 !important;
-        transform: translateX(3px) !important;
-    }
-
-    #studio-nav label:has(input:checked) {
-        background: linear-gradient(90deg, rgba(99, 102, 241, 0.22) 0%, rgba(139, 92, 246, 0.08) 100%) !important;
-        border-color: rgba(99, 102, 241, 0.35) !important;
-        color: #ffffff !important;
-        box-shadow: inset 3px 0 0 #6366f1, 0 4px 16px rgba(99, 102, 241, 0.15) !important;
-    }
-
-    #studio-nav input {
-        display: none !important;
-    }
-
-    .sidebar-library {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin: 24px 6px 0;
-        padding: 12px 14px;
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        color: #94a3b8;
-        font-size: 12px;
-        font-weight: 500;
-    }
-
-    .sidebar-library strong {
-        padding: 2px 8px;
-        border-radius: 999px;
-        background: rgba(99, 102, 241, 0.2);
-        color: #a5b4fc;
-        font-size: 11px;
-        font-weight: 700;
-    }
-
-    .sidebar-foot {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin: 14px 6px 0;
-        padding: 12px 14px;
-        border-radius: 12px;
-        background: rgba(16, 185, 129, 0.06);
-        border: 1px solid rgba(16, 185, 129, 0.2);
-    }
-
-    .sidebar-foot .status-dot {
-        position: relative;
-        width: 9px;
-        height: 9px;
-        flex: 0 0 auto;
-        border-radius: 50%;
-        background: #10b981;
-        box-shadow: 0 0 10px #10b981;
-    }
-
-    .sidebar-foot strong {
-        display: block;
-        font-size: 12px;
-        font-weight: 700;
-        color: #ecfdf5;
-    }
-
-    .sidebar-foot small {
-        display: block;
-        margin-top: 1px;
-        font-size: 11px;
-        color: #6ee7b7;
-    }
-
-    /* ==============================================================
-       MAIN WORKSPACE
-       ============================================================== */
-    #studio-main {
-        width: 100% !important;
-        max-width: 1440px !important;
-        min-height: 100vh !important;
-        margin: 0 auto !important;
-        padding: 0 32px calc(var(--ov-player-height) + 36px) !important;
-        box-sizing: border-box !important;
-    }
-
-    .studio-topbar {
-        position: sticky;
-        top: 0;
-        z-index: 20;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        min-height: 64px;
-        margin: 0 -32px 24px;
-        padding: 0 32px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(7, 9, 14, 0.85);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-    }
-
-    .studio-topbar strong {
-        color: #f8fafc;
-        font-size: 16px;
-        font-weight: 700;
-        letter-spacing: -0.01em;
-    }
-
-    .studio-topbar span {
-        margin-left: 10px;
-        color: #64748b;
-        font-size: 13px;
-        font-weight: 500;
-    }
-
-    .privacy-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 14px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        color: #94a3b8;
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    .privacy-badge::before {
-        content: '';
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: #10b981;
-    }
-
-    /* Workspace panels */
-    .studio-view {
-        width: 100% !important;
-        animation: studio-enter 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
-    }
-
-    @keyframes studio-enter {
-        from { opacity: 0; transform: translateY(6px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    .workspace-grid {
-        display: grid !important;
-        grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr) !important;
-        gap: 24px !important;
-        align-items: start !important;
-        width: 100% !important;
-    }
-
-    .editor-panel, .workspace-panel, .settings-panel, .result-panel {
-        background: rgba(14, 19, 31, 0.8) !important;
-        backdrop-filter: blur(12px) !important;
-        -webkit-backdrop-filter: blur(12px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 16px !important;
-        box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5) !important;
-        overflow: hidden;
-    }
-
-    .editor-panel, .workspace-panel {
-        padding: 28px !important;
-    }
-
-    .settings-panel, .result-panel {
-        padding: 24px !important;
-    }
-
-    .section-heading {
-        margin: 0 0 20px;
-    }
-
-    .section-heading h2 {
-        margin: 0 0 8px;
-        font-size: clamp(24px, 2.2vw, 32px);
-        font-weight: 800;
-        letter-spacing: -0.03em;
-        background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-
-    .section-heading p {
-        margin: 0;
-        max-width: 65ch;
-        color: #94a3b8;
-        font-size: 14px;
-        line-height: 1.6;
-    }
-
-    .editor-intro {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 12px;
-    }
-
-    .editor-kicker {
-        font-size: 12px;
-        font-weight: 600;
-        color: #818cf8;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
-
-    /* Form controls & inputs */
-    .gradio-container .form, .gradio-container .block {
-        background: transparent !important;
-        border: 0 !important;
-    }
-
-    .gradio-container label, .gradio-container .label-wrap, .gradio-container .block-label {
-        color: #cbd5e1 !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        margin-bottom: 6px !important;
-    }
-
-    .gradio-container [data-testid="block-info"], .field-note {
-        color: #64748b !important;
-        font-size: 12px !important;
-    }
-
-    .gradio-container input, .gradio-container textarea, .gradio-container [role="listbox"] {
-        background: #080b12 !important;
-        color: #f8fafc !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 12px !important;
-        padding: 12px 14px !important;
-        font-family: inherit !important;
-        font-size: 14px !important;
-        transition: all 180ms ease !important;
-    }
-
-    .editor-panel textarea {
-        min-height: 240px !important;
-        font-size: 16px !important;
-        line-height: 1.65 !important;
-    }
-
-    .gradio-container input::placeholder, .gradio-container textarea::placeholder {
-        color: #475569 !important;
-    }
-
-    .gradio-container input:focus, .gradio-container textarea:focus, .gradio-container [role="listbox"]:focus-visible {
-        outline: none !important;
-        border-color: #6366f1 !important;
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
-        background: #0b0f19 !important;
-    }
-
-    /* Buttons */
-    .gradio-container button {
-        border-radius: 12px !important;
-        font-weight: 650 !important;
-        letter-spacing: -0.01em !important;
-        transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1) !important;
-    }
-
-    .gradio-container button.primary.generate-button {
-        min-height: 52px !important;
-        margin-top: 16px !important;
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #a855f7 100%) !important;
-        border: none !important;
-        color: #ffffff !important;
-        font-size: 15px !important;
-        font-weight: 700 !important;
-        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
-        cursor: pointer !important;
-    }
-
-    .gradio-container button.primary.generate-button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 12px 30px rgba(99, 102, 241, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
-        filter: brightness(1.06);
-    }
-
-    .gradio-container button.primary.generate-button:active {
-        transform: translateY(1px) scale(0.99) !important;
-    }
-
-    .gradio-container button.secondary {
-        background: #141b2d !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        color: #e2e8f0 !important;
-        font-size: 13px !important;
-    }
-
-    .gradio-container button.secondary:hover {
-        background: #1e293b !important;
-        border-color: rgba(99, 102, 241, 0.4) !important;
-        color: #ffffff !important;
-    }
-
-    .quick-start-label {
-        margin: 18px 0 8px;
-        color: #64748b;
-        font-size: 12px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-
-    .gradio-container button.secondary.prompt-chip {
-        min-height: 32px !important;
-        padding: 0 14px !important;
-        border-radius: 999px !important;
-        background: rgba(255, 255, 255, 0.04) !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        color: #94a3b8 !important;
-        font-size: 12px !important;
-    }
-
-    .gradio-container button.secondary.prompt-chip:hover {
-        background: rgba(99, 102, 241, 0.15) !important;
-        border-color: rgba(99, 102, 241, 0.5) !important;
-        color: #ffffff !important;
-        transform: translateY(-1px);
-    }
-
-    /* Sliders */
-    .gradio-container input[type="range"] {
-        accent-color: #6366f1 !important;
-    }
-
-    /* Accordion */
-    .gradio-container .accordion {
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 12px !important;
-        background: rgba(8, 12, 20, 0.6) !important;
-        overflow: hidden;
-    }
-
-    .gradio-container .accordion > button {
-        background: rgba(8, 12, 20, 0.6) !important;
-        color: #cbd5e1 !important;
-        font-weight: 600 !important;
-        padding: 12px 16px !important;
-    }
-
-    /* Audio components */
-    .compact-audio {
-        border: 1px dashed rgba(99, 102, 241, 0.3) !important;
-        border-radius: 14px !important;
-        background: rgba(8, 12, 20, 0.6) !important;
-        padding: 8px !important;
-        transition: border-color 0.2s ease !important;
-    }
-
-    .compact-audio:hover {
-        border-color: rgba(99, 102, 241, 0.6) !important;
-    }
-
-    .output-audio {
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 14px !important;
-        background: rgba(8, 12, 20, 0.7) !important;
-        padding: 10px !important;
-    }
-
-    .status-field textarea {
-        min-height: 64px !important;
-        font-family: 'JetBrains Mono', monospace !important;
-        font-size: 12px !important;
-        color: #a5b4fc !important;
-        background: rgba(8, 12, 20, 0.8) !important;
-        border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    }
-
-    /* Voice Library */
-    .voice-library-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-        gap: 14px;
-        margin-bottom: 24px;
-    }
-
-    .voice-card {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 14px;
-        border-radius: 14px;
-        background: rgba(20, 27, 45, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        transition: all 180ms ease;
-    }
-
-    .voice-card:hover {
-        background: rgba(26, 36, 60, 0.8);
-        border-color: rgba(99, 102, 241, 0.4);
-        transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    }
-
-    .voice-avatar {
-        display: grid;
-        place-items: center;
-        width: 42px;
-        height: 42px;
-        border-radius: 12px;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
-        color: #ffffff;
-        font-weight: 700;
-        font-size: 13px;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-    .voice-avatar.tone-1 { background: linear-gradient(135deg, #ec4899, #f43f5e); }
-    .voice-avatar.tone-2 { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
-    .voice-avatar.tone-3 { background: linear-gradient(135deg, #10b981, #059669); }
-
-    .voice-card-copy strong {
-        display: block;
-        color: #f8fafc;
-        font-size: 14px;
-    }
-
-    .voice-card-copy span {
-        display: block;
-        margin-top: 2px;
-        color: #64748b;
-        font-size: 11px;
-    }
-
-    .voice-ready {
-        color: #10b981;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-
-    /* ==============================================================
-       PERSISTENT AUDIO PLAYER (BOTTOM DOCK)
-       ============================================================== */
-    .persistent-player {
-        position: fixed !important;
-        z-index: 30;
-        left: var(--ov-sidebar-width);
-        right: auto !important;
-        width: calc(100vw - var(--ov-sidebar-width)) !important;
-        box-sizing: border-box !important;
-        bottom: 0;
-        min-height: var(--ov-player-height);
-        padding: 10px 32px !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-        background: rgba(8, 12, 20, 0.94) !important;
-        backdrop-filter: blur(24px) !important;
-        -webkit-backdrop-filter: blur(24px) !important;
-        box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.6) !important;
-    }
-
-    .player-layout {
-        display: flex !important;
-        align-items: center !important;
-        gap: 20px !important;
-    }
-
-    .player-meta {
-        min-width: 160px;
-    }
-
-    .player-meta strong {
-        display: block;
-        color: #f8fafc;
-        font-size: 13px;
-        font-weight: 700;
-    }
-
-    .player-meta span {
-        display: block;
-        margin-top: 2px;
-        color: #818cf8;
-        font-size: 11px;
-    }
-
-    #footer-audio {
-        min-height: 52px !important;
-        min-width: 0 !important;
-        width: auto !important;
-        border: 0 !important;
-        background: transparent !important;
-    }
-
-    #footer-download {
-        min-width: 136px !important;
-        flex: 0 0 136px !important;
-        margin-left: 4px !important;
-    }
-
-    #footer-download button {
-        min-height: 40px !important;
-        border: 1px solid rgba(129, 140, 248, 0.42) !important;
-        border-radius: 10px !important;
-        background: rgba(99, 102, 241, 0.14) !important;
-        color: #c7d2fe !important;
-        font-size: 12px !important;
-        font-weight: 700 !important;
-    }
-
-    #footer-download button:hover {
-        background: rgba(99, 102, 241, 0.28) !important;
-        border-color: rgba(129, 140, 248, 0.72) !important;
-    }
-
-    /* Word Counter Badge (Injected by JS) */
-    .ov-stats-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin-top: 8px;
-        padding: 4px 12px;
-        border-radius: 999px;
-        background: rgba(99, 102, 241, 0.1);
-        border: 1px solid rgba(99, 102, 241, 0.25);
-        color: #a5b4fc;
-        font-size: 11px;
-        font-weight: 600;
-        font-family: 'JetBrains Mono', monospace;
-    }
-
-    /* Responsive */
-    @media (max-width: 1024px) {
-        .workspace-grid {
-            grid-template-columns: 1fr !important;
-        }
-    }
-
-    @media (max-width: 768px) {
-        .gradio-container .sidebar-parent {
-            padding-left: 0 !important;
-        }
-        #studio-sidebar {
-            display: none !important;
-        }
-        .persistent-player {
-            left: 0 !important;
-            width: 100vw !important;
-            padding: 8px 16px !important;
-        }
-        .player-meta {
-            display: none !important;
-        }
-        #studio-main {
-            padding: 0 16px calc(var(--ov-player-height) + 24px) !important;
-        }
-        .studio-topbar {
-            margin: 0 -16px 16px;
-            padding: 0 16px;
-        }
-    }
-    """
+    theme = gr.themes.Base(primary_hue="teal", neutral_hue="stone",
+                           font=["Segoe UI", "Arial", "sans-serif"])
+    # The studio always uses light surfaces, including Gradio dropdown overlays.
+    for token in tuple(vars(theme)):
+        if token.endswith("_dark"):
+            delattr(theme, token)
+    css = Path(__file__).with_name("studio.css").read_text(encoding="utf-8")
 
     # Reusable: language dropdown component
     def _lang_dropdown(label="Idioma", value=_DEFAULT_LANGUAGE):
@@ -2123,26 +1332,11 @@ def build_demo(
             )
         return ns, gs, dn, sp, du, pp, po
 
-    with gr.Blocks(theme=theme, css=css, title=_BRAND_TITLE) as demo:
-        with gr.Sidebar(
-            open=True,
-            width=260,
-            position="left",
-            elem_id="studio-sidebar",
-        ):
-            gr.HTML(
-                """
-                <div class="sidebar-brand">
-                    <span class="studio-mark" aria-label="Logo ColVoice"><strong>CV</strong><i></i><i></i></span>
-                    <div>
-                        <div class="studio-name">ColVoice</div>
-                        <div class="studio-subtitle">Studio local</div>
-                    </div>
-                </div>
-                <div class="sidebar-label">Herramientas</div>
-                """
-            )
-            studio_nav = gr.Radio(
+    with gr.Blocks(title=_BRAND_TITLE) as demo:
+        with gr.Row(elem_id="studio-navigation"):
+            logo = (Path(__file__).resolve().parents[3] / "assets" / "colvoice-mark.svg").read_text(encoding="utf-8")
+            gr.HTML(f'<div class="wordmark">{logo}<div><b>ColVoice</b><span>Estudio de voz</span></div></div>')
+            studio_nav = gr.Dropdown(
                 choices=[
                     "Texto a voz",
                     "Modo diálogo",
@@ -2155,82 +1349,11 @@ def build_demo(
                     "Configuración / API",
                 ],
                 value="Texto a voz",
-                label="",
+                label="Herramienta",
+                interactive=True,
                 elem_id="studio-nav",
             )
-            gr.HTML(
-                f"""
-                <div class="sidebar-library">
-                    <span>Biblioteca de voces</span>
-                    <strong>{len(_read_voice_index())}</strong>
-                </div>
-                <div class="sidebar-foot">
-                    <span class="status-dot"></span>
-                    <div><strong>RTX activa</strong><small>Procesamiento local</small></div>
-                </div>
-                """
-            )
-
         with gr.Column(elem_id="studio-main"):
-            gr.HTML(
-                """
-                <header class="studio-topbar">
-                    <div>
-                        <strong>ColVoice — Voz Colombiana</strong>
-                        <span>Creación y conversión de voz</span>
-                    </div>
-                    <span class="privacy-badge">100% Local & Privado</span>
-                </header>
-                <script>
-                (function() {
-                    // 1. Keyboard shortcut: Ctrl+Enter / Cmd+Enter to Generate
-                    document.addEventListener('keydown', function(e) {
-                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                            const activeViews = document.querySelectorAll('.studio-view');
-                            for (const view of activeViews) {
-                                if (view.offsetParent !== null) {
-                                    const btn = view.querySelector('.generate-button button, button.generate-button');
-                                    if (btn && !btn.disabled) {
-                                        e.preventDefault();
-                                        btn.click();
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    });
-
-                    // 2. Real-time stats badge on textareas
-                    function setupWordCounters() {
-                        const textareas = document.querySelectorAll('#studio-main textarea');
-                        textareas.forEach(ta => {
-                            if (ta.dataset.hasCounter) return;
-                            ta.dataset.hasCounter = "true";
-                            
-                            const badge = document.createElement('div');
-                            badge.className = 'ov-stats-badge';
-                            badge.textContent = '⚡ 0 palabras · 0 caracteres · ~0s';
-                            if (ta.parentNode) {
-                                ta.parentNode.appendChild(badge);
-                            }
-
-                            function updateStats() {
-                                const text = ta.value.trim();
-                                const words = text ? text.split(/\\s+/).length : 0;
-                                const chars = text.length;
-                                const duration = Math.round((words / 140) * 60);
-                                badge.textContent = `⚡ ${words} palabras · ${chars} caracteres · ~${duration}s de audio (Ctrl+Enter para generar)`;
-                            }
-                            ta.addEventListener('input', updateStats);
-                            updateStats();
-                        });
-                    }
-
-                    setInterval(setupWordCounters, 1000);
-                })();
-                </script>
-                """
-            )
             with gr.Row(
                 elem_id="persistent-player",
                 elem_classes=["persistent-player", "player-layout"],
@@ -2239,7 +1362,7 @@ def build_demo(
                     """
                     <div class="player-meta">
                         <strong>Reproductor</strong>
-                        <span>Tu última generación permanece aquí</span>
+                        <span>Audio del estudio</span>
                     </div>
                     """
                 )
@@ -2247,7 +1370,8 @@ def build_demo(
                     label="",
                     show_label=False,
                     interactive=False,
-                    buttons=["download"],
+                    buttons=[],
+                    waveform_options=dict(waveform_color="#8bb9ab", waveform_progress_color="#17644e"),
                     type="filepath",
                     elem_id="footer-audio",
                     scale=8,
@@ -2260,6 +1384,13 @@ def build_demo(
                     elem_classes="footer-download",
                     scale=0,
                     min_width=136,
+                )
+                gr.HTML(
+                    '<nav aria-label="Créditos de ColVoice">by '
+                    '<a href="https://mauroaguirre.com/" target="_blank" rel="noopener noreferrer">Mauroaguirre.com</a>'
+                    ' · <a href="https://github.com/mauroaguirrecom/colvoice" target="_blank" rel="noopener noreferrer">'
+                    'Repositorio en GitHub</a></nav>',
+                    elem_id="player-credits",
                 )
 
             def _sync_footer_download(audio):
@@ -2298,7 +1429,7 @@ def build_demo(
                             """
                             <div class="section-heading">
                                 <h2>Texto a voz</h2>
-                                <p>Escribe el guion, selecciona una voz y ajusta la interpretación. El resultado aparecerá en el reproductor inferior.</p>
+                                <p>Elige una voz y escribe tu narración.</p>
                             </div>
                             """
                         )
@@ -2309,19 +1440,11 @@ def build_demo(
                                 value=no_saved_voice,
                                 scale=4,
                             )
-                        gr.HTML(
-                            "<div class='editor-intro'><span class='editor-kicker'>Guion de la narración</span><span class='editor-kicker'>Procesamiento local</span></div>"
-                        )
                         vc_text = gr.Textbox(
-                            label="",
-                            show_label=False,
-                            lines=12,
+                            label="Guion",
+                            lines=5,
                             placeholder="Escribe o pega aquí el texto que quieres convertir en voz...",
                         )
-                        gr.HTML(
-                            "<p class='field-note'>Mejora de pronunciación activa para español: normaliza números, porcentajes y abreviaturas comunes antes de sintetizar.</p>"
-                        )
-                        gr.HTML("<div class='quick-start-label'>Empezar con un ejemplo</div>")
                         with gr.Row():
                             vc_example_news = gr.Button(
                                 "Noticias",
@@ -2377,7 +1500,7 @@ def build_demo(
                             """
                         )
                         vc_lang = _lang_dropdown("Idioma")
-                        with gr.Accordion("Dirección de voz", open=True):
+                        with gr.Accordion("Interpretación y similitud", open=False):
                             vc_instruct = gr.Dropdown(
                                 label="Perfil de interpretación",
                                 choices=[
@@ -2435,7 +1558,7 @@ def build_demo(
                         )
                         vc_status = gr.Textbox(
                             label="Actividad",
-                            lines=3,
+                            lines=1,
                             elem_classes="status-field",
                         )
 
@@ -2507,6 +1630,8 @@ def build_demo(
                         if not chunks:
                             raise ValueError("Escribe el texto que quieres convertir en voz.")
                         pieces = []
+                        if saved_prompt is None and ref_aud:
+                            saved_prompt = _prepare_reference(ref_aud, ref_text)
                         for index, chunk in enumerate(chunks, 1):
                             progress(
                                 (index - 1) / len(chunks),
@@ -2629,19 +1754,35 @@ def build_demo(
                 gr.Markdown(
                     """## Modo diálogo
 
-Crea conversaciones con varias voces guardadas. Escribe una línea por turno con
-el formato `Nombre de voz: texto`; si omites el nombre se usará la voz predeterminada.
+Escribe `@` al comenzar un turno y selecciona una voz. Para líneas sin nombre, elige una voz predeterminada.
 Cada turno se genera por separado y se une con pausas naturales.
 """
                 )
                 dialogue_script = gr.Textbox(
                     label="Guion de conversación",
-                    lines=12,
+                    lines=6,
                     placeholder=(
-                        "Narradora: Hola, ¿cómo estás?\n"
-                        "Narrador: Muy bien, gracias por preguntar."
+                        "@Linda: Hola, ¿cómo estás?\n@"
                     ),
                 )
+                mention_choices = gr.Radio(label="Selecciona una voz para este turno", choices=[], visible=False, elem_id="voice-mentions")
+
+                def suggest_voices(script):
+                    line = (script or "").split("\n")[-1].lstrip()
+                    active = line.startswith("@") and ":" not in line
+                    matches = [e["name"] for e in _read_voice_index()
+                               if active and line[1:].casefold() in e["name"].casefold()]
+                    return gr.update(choices=matches, value=None, visible=active,
+                                     label="Selecciona una voz" if matches else "Sin coincidencias en Mis voces")
+
+                def insert_voice(script, name):
+                    prefix, separator, line = script.rpartition("\n")
+                    if not name or not line.lstrip().startswith("@") or ":" in line:
+                        return script, gr.update(visible=False)
+                    return prefix + separator + "@" + name + ": ", gr.update(visible=False, value=None)
+
+                dialogue_script.input(suggest_voices, dialogue_script, mention_choices, trigger_mode="always_last")
+                mention_choices.input(insert_voice, [dialogue_script, mention_choices], [dialogue_script, mention_choices])
                 with gr.Row():
                     dialogue_default_voice = gr.Dropdown(
                         label="Voz predeterminada",
@@ -2689,10 +1830,6 @@ Cada turno se genera por separado y se une con pausas naturales.
                         default_name = available.get(
                             (default_voice or "").casefold(), default_voice
                         )
-                        if not default_name or default_name == no_saved_voice:
-                            raise ValueError(
-                                "Selecciona una voz predeterminada guardada en Mis voces."
-                            )
                         turns = []
                         for raw_line in script.splitlines():
                             line = raw_line.strip()
@@ -2702,14 +1839,21 @@ Cada turno se genera por separado y se une con pausas naturales.
                             utterance = line
                             if ":" in line:
                                 label, candidate = line.split(":", 1)
-                                matched = available.get(label.strip().casefold())
+                                matched = available.get(label.strip().removeprefix("@").casefold())
                                 if matched and candidate.strip():
                                     selected_name = matched
                                     utterance = candidate.strip()
+                                elif line.startswith("@"):
+                                    raise ValueError(f"Revisa el nombre y el texto del turno {len(turns)+1}.")
+                            elif line.startswith("@"):
+                                raise ValueError("Selecciona la voz y escribe el texto después de los dos puntos.")
+                            if selected_name not in available.values():
+                                raise ValueError("Selecciona una voz predeterminada para los turnos sin nombre.")
                             turns.append((selected_name, utterance))
                         if not turns:
                             raise ValueError("No se encontraron turnos válidos.")
                         outputs = []
+                        profiles = {}
                         pause = np.zeros(int(sampling_rate * 0.14), dtype=np.int16)
                         effective_gs = _similarity_to_guidance(similarity)
                         for index, (voice_name, utterance) in enumerate(turns, 1):
@@ -2717,7 +1861,9 @@ Cada turno se genera por separado y se une con pausas naturales.
                                 (index - 1) / len(turns),
                                 desc=f"Generando turno {index} de {len(turns)}",
                             )
-                            prompt = _load_saved_voice(voice_name)
+                            if voice_name not in profiles:
+                                profiles[voice_name] = (_load_saved_voice(voice_name), _get_pronunciation_dictionary(voice_name))
+                            prompt, dictionary = profiles[voice_name]
                             result, status = _gen(
                                 utterance,
                                 lang,
@@ -2732,7 +1878,7 @@ Cada turno se genera por separado y se une con pausas naturales.
                                 po,
                                 mode="clone",
                                 voice_clone_prompt=prompt,
-                                pronunciation=_get_pronunciation_dictionary(voice_name),
+                                pronunciation=dictionary,
                             )
                             if result is None:
                                 raise RuntimeError(status)
@@ -3378,6 +2524,11 @@ pista vocal ya aislada.
                             </div>
                             """
                         )
+                        with gr.Row():
+                            library_export = gr.Button("Exportar voces", variant="secondary")
+                            library_import_file = gr.UploadButton("Importar voces (.zip)", file_types=[".zip"], type="filepath")
+                        library_zip = gr.File(label="Descargar biblioteca exportada", interactive=False)
+                        library_transfer_status = gr.Textbox(label="Transferencia", interactive=False)
                         library_html = gr.HTML(_voice_library_markup())
                         with gr.Row():
                             library_voice = gr.Dropdown(
@@ -3433,26 +2584,6 @@ pista vocal ya aislada.
                             )
                             library_save_pronunciation = gr.Button(
                                 "Guardar pronunciaciones",
-                                variant="secondary",
-                                elem_classes="utility-button",
-                            )
-                        with gr.Accordion("Transferir voces entre instalaciones", open=True):
-                            gr.HTML(
-                                "<p class='field-note'>Exporta tus prompts y referencias como un ZIP para llevarlos a otro ColVoice. Las voces importadas conservan su nombre; los duplicados se renombran automáticamente.</p>"
-                            )
-                            library_export = gr.DownloadButton(
-                                "Exportar biblioteca (.zip)",
-                                value=None,
-                                interactive=True,
-                                elem_classes="utility-button",
-                            )
-                            library_import_file = gr.File(
-                                label="Archivo de biblioteca ColVoice",
-                                file_types=[".zip"],
-                                type="filepath",
-                            )
-                            library_import = gr.Button(
-                                "Importar biblioteca",
                                 variant="secondary",
                                 elem_classes="utility-button",
                             )
@@ -3517,16 +2648,16 @@ pista vocal ya aislada.
                 )
                 library_export.click(
                     _export_voice_library,
-                    outputs=[library_export],
+                    outputs=[library_zip],
                 )
-                library_import.click(
+                library_import_file.upload(
                     _import_voice_library,
                     inputs=[library_import_file],
                     outputs=[
                         library_html,
                         library_voice,
                         library_pronunciation,
-                        library_status,
+                        library_transfer_status,
                     ],
                 )
 
@@ -3650,6 +2781,11 @@ Para consultar el contrato completo, abre `AGENTS.md` o `API.md` en la raíz del
                 ],
             )
 
+    demo.colvoice_style = dict(theme=theme, css=css, js="""() => {
+        const dock = document.getElementById('persistent-player');
+        if (dock) new ResizeObserver(() => document.documentElement.style.setProperty(
+            '--dock-height', dock.offsetHeight + 'px')).observe(dock);
+    }""")
     return demo
 
 
@@ -3685,6 +2821,7 @@ def main(argv=None) -> int:
     demo = build_demo(model, checkpoint)
 
     demo.queue().launch(
+        **demo.colvoice_style,
         server_name=args.ip,
         server_port=args.port,
         share=args.share,

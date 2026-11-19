@@ -103,6 +103,7 @@ def main():
         )
     try:
         demo.queue(default_concurrency_limit=1).launch(
+            **demo.colvoice_style,
             server_name="127.0.0.1", server_port=args.port, share=False,
         )
     finally:
