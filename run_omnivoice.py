@@ -1,5 +1,6 @@
 """Local launcher with optional smoke test and conservative memory defaults."""
 import argparse
+import atexit
 import os
 from pathlib import Path
 
@@ -28,6 +29,7 @@ def main():
     pid_path = ROOT / "logs" / "server.pid"
     pid_path.parent.mkdir(parents=True, exist_ok=True)
     pid_path.write_text(str(os.getpid()), encoding="utf-8")
+    atexit.register(lambda: pid_path.unlink(missing_ok=True))
     torch.set_num_threads(min(4, os.cpu_count() or 1))
     checkpoint = str(ROOT / "models" / "OmniVoice")
     asr_model = "openai/whisper-base"

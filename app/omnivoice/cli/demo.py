@@ -894,12 +894,15 @@ def build_demo(
         chunks = []
         current = ""
         for sentence in sentences:
-            if not sentence:
-                continue
-            if current and len(current) + len(sentence) + 1 > max_chars:
-                chunks.append(current)
-                current = ""
-            current = f"{current} {sentence}".strip()
+            words = sentence.split()
+            while words:
+                if current and len(current) + len(words[0]) + 1 > max_chars:
+                    chunks.append(current)
+                    current = ""
+                current = f"{current} {words.pop(0)}".strip()
+                if len(current) >= max_chars:
+                    chunks.append(current)
+                    current = ""
         if current:
             chunks.append(current)
         return chunks or [clean]

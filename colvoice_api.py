@@ -30,6 +30,16 @@ from omnivoice.cli.demo import (
 API_VERSION = "1"
 
 
+def _coerce_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().casefold() in {"1", "true", "yes", "si", "sí", "on"}
+    return bool(value)
+
+
 class _ColVoiceService:
     def __init__(self, model, root: Path, voice_library: Path):
         self.model = model
@@ -77,7 +87,8 @@ class _ColVoiceService:
         }
 
     def voices(self) -> dict[str, Any]:
-        return {"voices": self._read_voices(), "count": len(self._read_voices())}
+        voices = self._read_voices()
+        return {"voices": voices, "count": len(voices)}
 
     def _find_voice_entry(self, name: str) -> dict[str, Any]:
         wanted = name.strip().casefold()
@@ -87,6 +98,8 @@ class _ColVoiceService:
                 result["prompt"] = VoiceClonePrompt.load(
                     str(self.voice_library / entry["file"])
                 )
+                pronunciation = entry.get("pronunciation", {})
+                result["pronunciation"] = pronunciation if isinstance(pronunciation, dict) else {}
                 return result
         raise ValueError(f"No existe una voz guardada llamada '{name}'.")
 
@@ -111,7 +124,7 @@ class _ColVoiceService:
         text = str(payload.get("text", "")).strip()
         if not text:
             raise ValueError("El campo 'text' es obligatorio.")
-        language = payload.get("language") or "Spanish"
+        language = str(payload.get("language") or "Spanish")
         is_spanish = _is_spanish_language(language)
         target_text = _prepare_spanish_text(text) if is_spanish else text
         voice_entry = None
@@ -123,9 +136,9 @@ class _ColVoiceService:
                     target_text, voice_entry.get("pronunciation", {})
                 )
         config = OmniVoiceGenerationConfig(
-            num_step=int(payload.get("num_step", 32)),
-            guidance_scale=float(payload.get("guidance_scale", 2.0)),
-            denoise=bool(payload.get("denoise", True)),
+            num_step=max(4, min(64, int(payload.get("num_step", 32)))),
+            guidance_scale=max(0.0, min(4.0, float(payload.get("guidance_scale", 2.0)))),
+            denoise=_coerce_bool(payload.get("denoise"), True),
             postprocess_output=True,
         )
         kwargs: dict[str, Any] = {
@@ -136,9 +149,9 @@ class _ColVoiceService:
         if is_spanish:
             kwargs["normalize_text"] = True
         if payload.get("speed") is not None:
-            kwargs["speed"] = float(payload["speed"])
+            kwargs["speed"] = max(0.25, min(3.0, float(payload["speed"])))
         if payload.get("duration") is not None:
-            kwargs["duration"] = float(payload["duration"])
+            kwargs["duration"] = max(0.1, min(600.0, float(payload["duration"])))
         if voice_entry:
             kwargs["voice_clone_prompt"] = voice_entry["prompt"]
 
