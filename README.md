@@ -25,6 +25,7 @@ Para conectar Codex, Claude Code u otro agente sin leer el código completo, usa
 - Clonación de voz con referencia corta o grabación larga recortada automáticamente.
 - Texto pronunciado opcional con transcripción automática mediante Whisper.
 - Evaluador de calidad palabra por palabra para detectar omisiones y pronunciaciones problemáticas.
+- Modo diálogo con varias voces, similitud de clonación, limpieza local de audio y generación progresiva por fragmentos.
 - Voice Changer para conservar ritmo, pausas y actuación de una grabación.
 - Biblioteca local de voces y descarga de audios generados.
 

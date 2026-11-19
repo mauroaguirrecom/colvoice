@@ -128,6 +128,13 @@ esperado. El informe muestra precisión estimada, WER y las palabras omitidas o
 sustituidas; esas palabras pueden corregirse en el diccionario de pronunciación de
 **Mis voces**. También está disponible para agentes mediante `POST /v1/evaluate`.
 
+### Diálogos, similitud y limpieza
+
+- **Modo diálogo:** escribe turnos como `Narradora: Hola` y `Narrador: Bienvenido`, usando voces guardadas en **Mis voces**.
+- **Similitud de clonación:** controla el equilibrio entre conservar la identidad de la referencia y permitir una interpretación más natural.
+- **Aislamiento y limpieza:** abre **Limpieza de audio** para reducir ruido constante antes de clonar una voz. El resultado se descarga como WAV y puede volver a usarse como referencia.
+- **Streaming local:** en **Texto a voz** activa “Generar por fragmentos...” para escuchar avances mientras se procesa el guion completo.
+
 ## Diseño de voz y voz automática
 
 ```python

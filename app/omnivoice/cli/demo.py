@@ -885,6 +885,60 @@ def build_demo(
         waveform, sample_rate = load_waveform(audio_path)
         return float(waveform.shape[-1]) / float(sample_rate)
 
+    def _split_text_for_streaming(text, max_chars=260):
+        """Split a script at sentence boundaries for progressive generation."""
+        clean = re.sub(r"\s+", " ", (text or "").strip())
+        if not clean:
+            return []
+        sentences = re.split(r"(?<=[.!?¡¿])\s+", clean)
+        chunks = []
+        current = ""
+        for sentence in sentences:
+            if not sentence:
+                continue
+            if current and len(current) + len(sentence) + 1 > max_chars:
+                chunks.append(current)
+                current = ""
+            current = f"{current} {sentence}".strip()
+        if current:
+            chunks.append(current)
+        return chunks or [clean]
+
+    def _clean_audio_file(audio_path, strength=0.65):
+        """Apply a conservative local noise gate and peak normalization."""
+        source = _validate_audio_file(audio_path, "audio para limpiar")
+        waveform, sample_rate = load_waveform(source)
+        if waveform.shape[0] > 1:
+            waveform = np.mean(waveform, axis=0, keepdims=True)
+        signal = np.asarray(waveform[0], dtype=np.float32)
+        if signal.size == 0:
+            raise ValueError("El audio no contiene muestras utilizables.")
+        strength = float(np.clip(strength if strength is not None else 0.65, 0.0, 1.0))
+        noise_floor = float(np.percentile(np.abs(signal), 15))
+        threshold = max(0.003, noise_floor * (2.0 + 6.0 * strength))
+        active = (np.abs(signal) >= threshold).astype(np.float32)
+        smoothing = max(3, int(sample_rate * 0.018))
+        kernel = np.ones(smoothing, dtype=np.float32) / smoothing
+        envelope = np.convolve(active, kernel, mode="same")
+        gate = np.clip((envelope - 0.08) / 0.42, 0.0, 1.0)
+        cleaned = signal * (1.0 - strength * 0.88 * (1.0 - gate))
+        peak = float(np.max(np.abs(cleaned)))
+        if peak > 0.98:
+            cleaned = cleaned * (0.98 / peak)
+        output_dir = Path.cwd() / "outputs" / "cleaned"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f"colvoice-clean-{uuid.uuid4().hex}.wav"
+        sf.write(str(output_path), cleaned, sample_rate, subtype="PCM_16")
+        reduction = max(0.0, 1.0 - float(np.sqrt(np.mean(cleaned**2))) / max(float(np.sqrt(np.mean(signal**2))), 1e-6))
+        return str(output_path), reduction
+
+    def _similarity_to_guidance(value):
+        """Map the user-facing clone similarity control to OmniVoice CFG."""
+        value = float(np.clip(value if value is not None else 0.72, 0.0, 1.0))
+        # OmniVoice exposes CFG rather than an explicit speaker-similarity knob.
+        # This bounded mapping makes the trade-off predictable: identity ↔ freedom.
+        return round(0.8 + (2.8 * value), 3)
+
     def _evaluate_quality_fn(audio_path, expected_text):
         """Compare the expected script with an ASR transcript from a generated WAV."""
         try:
@@ -1434,12 +1488,14 @@ def build_demo(
     }
 
     #studio-nav label:nth-child(1)::before { content: "🎙️"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(2)::before { content: "🔄"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(3)::before { content: "⚡"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(4)::before { content: "🎨"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(5)::before { content: "📁"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(6)::before { content: "🔎"; font-size: 15px; margin-right: 10px; }
-    #studio-nav label:nth-child(7)::before { content: "⚙️"; font-size: 15px; margin-right: 10px; }
+    #studio-nav label:nth-child(2)::before { content: "💬"; font-size: 15px; margin-right: 10px; }
+    #studio-nav label:nth-child(3)::before { content: "🧹"; font-size: 15px; margin-right: 10px; }
+    #studio-nav label:nth-child(4)::before { content: "🔄"; font-size: 15px; margin-right: 10px; }
+    #studio-nav label:nth-child(5)::before { content: "⚡"; font-size: 15px; margin-right: 10px; }
+    #studio-nav label:nth-child(6)::before { content: "🎨"; font-size: 15px; margin-right: 10px; }
+    #studio-nav label:nth-child(7)::before { content: "📁"; font-size: 15px; margin-right: 10px; }
+    #studio-nav label:nth-child(8)::before { content: "🔎"; font-size: 15px; margin-right: 10px; }
+    #studio-nav label:nth-child(9)::before { content: "⚙️"; font-size: 15px; margin-right: 10px; }
 
     #studio-nav label:hover {
         background: rgba(255, 255, 255, 0.05) !important;
@@ -2086,6 +2142,8 @@ def build_demo(
             studio_nav = gr.Radio(
                 choices=[
                     "Texto a voz",
+                    "Modo diálogo",
+                    "Limpieza de audio",
                     "Cambiar voz",
                     "Voice Changer",
                     "Diseñar voz",
@@ -2340,6 +2398,22 @@ def build_demo(
                                     "Estos perfiles solo ajustan timbre y estilo."
                                 ),
                             )
+                            vc_similarity = gr.Slider(
+                                0.0,
+                                1.0,
+                                value=0.72,
+                                step=0.05,
+                                label="Similitud de clonación",
+                                info=(
+                                    "Más alto: conserva más la identidad de la referencia. "
+                                    "Más bajo: permite una interpretación más libre."
+                                ),
+                            )
+                            vc_streaming = gr.Checkbox(
+                                label="Generar por fragmentos y reproducir progresivamente",
+                                value=True,
+                                info="Empieza a escuchar mientras ColVoice procesa el resto del guion.",
+                            )
                         (
                             vc_ns,
                             vc_gs,
@@ -2376,12 +2450,15 @@ def build_demo(
                     du,
                     pp,
                     po,
+                    clone_similarity=None,
                 ):
                     try:
                         saved_prompt = _load_saved_voice(saved_voice)
                     except Exception as e:
                         return None, f"Error: {type(e).__name__}: {e}"
                     pronunciation = _get_pronunciation_dictionary(saved_voice)
+                    if clone_similarity is not None:
+                        gs = _similarity_to_guidance(clone_similarity)
                     return _gen(
                         text,
                         lang,
@@ -2399,6 +2476,69 @@ def build_demo(
                         voice_clone_prompt=saved_prompt,
                         pronunciation=pronunciation,
                     )
+
+                def _clone_stream_fn(
+                    text,
+                    lang,
+                    saved_voice,
+                    ref_aud,
+                    ref_text,
+                    instruct,
+                    ns,
+                    gs,
+                    dn,
+                    sp,
+                    du,
+                    pp,
+                    po,
+                    clone_similarity,
+                    streaming,
+                    progress=gr.Progress(),
+                ):
+                    """Generate sentence chunks and yield an ever-growing preview."""
+                    try:
+                        saved_prompt = _load_saved_voice(saved_voice)
+                        pronunciation = _get_pronunciation_dictionary(saved_voice)
+                        effective_gs = _similarity_to_guidance(clone_similarity)
+                        chunks = _split_text_for_streaming(text) if streaming else [text]
+                        if not chunks:
+                            raise ValueError("Escribe el texto que quieres convertir en voz.")
+                        pieces = []
+                        for index, chunk in enumerate(chunks, 1):
+                            progress(
+                                (index - 1) / len(chunks),
+                                desc=f"Generando fragmento {index} de {len(chunks)}",
+                            )
+                            result, status = _gen(
+                                chunk,
+                                lang,
+                                ref_aud,
+                                instruct,
+                                ns,
+                                effective_gs,
+                                dn,
+                                sp,
+                                (float(du) / len(chunks)) if du else du,
+                                pp,
+                                po,
+                                mode="clone",
+                                ref_text=ref_text or None,
+                                voice_clone_prompt=saved_prompt,
+                                pronunciation=pronunciation,
+                            )
+                            if result is None:
+                                yield None, status
+                                return
+                            pieces.append(np.asarray(result[1], dtype=np.int16))
+                            joined = np.concatenate(pieces)
+                            yield (
+                                (sampling_rate, joined),
+                                f"Fragmento {index}/{len(chunks)} listo. "
+                                "Puedes escuchar el avance mientras continúa.",
+                            )
+                        progress(1.0, desc="Generación completada")
+                    except Exception as error:
+                        yield None, f"Error: {type(error).__name__}: {error}"
 
                 def _save_clone_voice_fn(name, ref_audio, ref_text):
                     try:
@@ -2458,7 +2598,7 @@ def build_demo(
                 )
 
                 vc_btn.click(
-                    _clone_fn,
+                    _clone_stream_fn,
                     inputs=[
                         vc_text,
                         vc_lang,
@@ -2473,8 +2613,210 @@ def build_demo(
                         vc_du,
                         vc_pp,
                         vc_po,
+                        vc_similarity,
+                        vc_streaming,
                     ],
                     outputs=[footer_audio, vc_status],
+                )
+
+            # ==============================================================
+            # Multi-speaker dialogue
+            # ==============================================================
+            with gr.Group(visible=False, elem_classes="studio-view") as dialogue_view:
+                gr.Markdown(
+                    """## Modo diálogo
+
+Crea conversaciones con varias voces guardadas. Escribe una línea por turno con
+el formato `Nombre de voz: texto`; si omites el nombre se usará la voz predeterminada.
+Cada turno se genera por separado y se une con pausas naturales.
+"""
+                )
+                dialogue_script = gr.Textbox(
+                    label="Guion de conversación",
+                    lines=12,
+                    placeholder=(
+                        "Narradora: Hola, ¿cómo estás?\n"
+                        "Narrador: Muy bien, gracias por preguntar."
+                    ),
+                )
+                with gr.Row():
+                    dialogue_default_voice = gr.Dropdown(
+                        label="Voz predeterminada",
+                        choices=_saved_voice_choices(),
+                        value=no_saved_voice,
+                    )
+                    dialogue_lang = _lang_dropdown("Idioma", value="Spanish")
+                    dialogue_similarity = gr.Slider(
+                        0.0,
+                        1.0,
+                        value=0.72,
+                        step=0.05,
+                        label="Similitud",
+                        info="Identidad de cada voz frente a naturalidad.",
+                    )
+                dialogue_ns, dialogue_gs, dialogue_dn, dialogue_sp, dialogue_du, dialogue_pp, dialogue_po = _gen_settings()
+                dialogue_button = gr.Button(
+                    "Generar diálogo",
+                    variant="primary",
+                    elem_classes="generate-button",
+                )
+                dialogue_status = gr.Textbox(label="Estado", interactive=False, lines=3)
+
+                def _dialogue_fn(
+                    script,
+                    default_voice,
+                    lang,
+                    similarity,
+                    ns,
+                    gs,
+                    dn,
+                    sp,
+                    du,
+                    pp,
+                    po,
+                    progress=gr.Progress(),
+                ):
+                    try:
+                        if not (script or "").strip():
+                            raise ValueError("Escribe el guion de la conversación.")
+                        available = {
+                            entry["name"].casefold(): entry["name"]
+                            for entry in _read_voice_index()
+                        }
+                        default_name = available.get(
+                            (default_voice or "").casefold(), default_voice
+                        )
+                        if not default_name or default_name == no_saved_voice:
+                            raise ValueError(
+                                "Selecciona una voz predeterminada guardada en Mis voces."
+                            )
+                        turns = []
+                        for raw_line in script.splitlines():
+                            line = raw_line.strip()
+                            if not line:
+                                continue
+                            selected_name = default_name
+                            utterance = line
+                            if ":" in line:
+                                label, candidate = line.split(":", 1)
+                                matched = available.get(label.strip().casefold())
+                                if matched and candidate.strip():
+                                    selected_name = matched
+                                    utterance = candidate.strip()
+                            turns.append((selected_name, utterance))
+                        if not turns:
+                            raise ValueError("No se encontraron turnos válidos.")
+                        outputs = []
+                        pause = np.zeros(int(sampling_rate * 0.14), dtype=np.int16)
+                        effective_gs = _similarity_to_guidance(similarity)
+                        for index, (voice_name, utterance) in enumerate(turns, 1):
+                            progress(
+                                (index - 1) / len(turns),
+                                desc=f"Generando turno {index} de {len(turns)}",
+                            )
+                            prompt = _load_saved_voice(voice_name)
+                            result, status = _gen(
+                                utterance,
+                                lang,
+                                None,
+                                None,
+                                ns,
+                                effective_gs,
+                                dn,
+                                sp,
+                                du,
+                                pp,
+                                po,
+                                mode="clone",
+                                voice_clone_prompt=prompt,
+                                pronunciation=_get_pronunciation_dictionary(voice_name),
+                            )
+                            if result is None:
+                                raise RuntimeError(status)
+                            if outputs:
+                                outputs.append(pause)
+                            outputs.append(np.asarray(result[1], dtype=np.int16))
+                        progress(1.0, desc="Diálogo completado")
+                        return (sampling_rate, np.concatenate(outputs)), (
+                            f"Diálogo listo: {len(turns)} turnos generados."
+                        )
+                    except Exception as error:
+                        return None, f"Error: {type(error).__name__}: {error}"
+
+                dialogue_button.click(
+                    _dialogue_fn,
+                    inputs=[
+                        dialogue_script,
+                        dialogue_default_voice,
+                        dialogue_lang,
+                        dialogue_similarity,
+                        dialogue_ns,
+                        dialogue_gs,
+                        dialogue_dn,
+                        dialogue_sp,
+                        dialogue_du,
+                        dialogue_pp,
+                        dialogue_po,
+                    ],
+                    outputs=[footer_audio, dialogue_status],
+                )
+
+            # ==============================================================
+            # Local voice isolation / cleanup
+            # ==============================================================
+            with gr.Group(visible=False, elem_classes="studio-view") as cleaning_view:
+                gr.Markdown(
+                    """## Aislamiento y limpieza de audio
+
+Reduce ruido constante, silencios ambientales y variaciones de nivel antes de
+clonar una voz o usar Voice Changer. El procesamiento es local y conservador para
+preservar la interpretación; para separar música de voz se recomienda usar una
+pista vocal ya aislada.
+"""
+                )
+                cleaning_input = gr.Audio(
+                    label="Audio original",
+                    type="filepath",
+                    elem_classes="compact-audio",
+                )
+                cleaning_strength = gr.Slider(
+                    0.0,
+                    1.0,
+                    value=0.65,
+                    step=0.05,
+                    label="Intensidad de reducción de ruido",
+                    info="Usa valores bajos si la grabación tiene respiraciones o voz muy suave.",
+                )
+                cleaning_button = gr.Button(
+                    "Limpiar audio",
+                    variant="primary",
+                    elem_classes="generate-button",
+                )
+                cleaning_output = gr.Audio(
+                    label="Audio limpio",
+                    type="filepath",
+                    buttons=["download"],
+                    visible=False,
+                )
+                cleaning_status = gr.Textbox(label="Estado", interactive=False, lines=3)
+
+                def _cleaning_fn(audio_path, strength):
+                    try:
+                        output_path, reduction = _clean_audio_file(audio_path, strength)
+                        return (
+                            gr.update(value=output_path, visible=True),
+                            f"Audio limpio. Reducción RMS aproximada: {reduction * 100:.1f}%. "
+                            "Puedes usarlo ahora como referencia de clonación.",
+                        )
+                    except Exception as error:
+                        return gr.update(value=None, visible=False), (
+                            f"Error: {type(error).__name__}: {error}"
+                        )
+
+                cleaning_button.click(
+                    _cleaning_fn,
+                    inputs=[cleaning_input, cleaning_strength],
+                    outputs=[cleaning_output, cleaning_status],
                 )
 
             # ==============================================================
@@ -3265,6 +3607,8 @@ Para consultar el contrato completo, abre `AGENTS.md` o `API.md` en la raíz del
 
                 return (
                     gr.update(visible=section == "Texto a voz"),
+                    gr.update(visible=section == "Modo diálogo"),
+                    gr.update(visible=section == "Limpieza de audio"),
                     gr.update(visible=section == "Cambiar voz"),
                     gr.update(visible=section == "Voice Changer"),
                     gr.update(visible=section == "Diseñar voz"),
@@ -3288,6 +3632,8 @@ Para consultar el contrato completo, abre `AGENTS.md` o `API.md` en la raíz del
                 ],
                 outputs=[
                     clone_view,
+                    dialogue_view,
+                    cleaning_view,
                     audio_view,
                     changer_view,
                     design_view,
