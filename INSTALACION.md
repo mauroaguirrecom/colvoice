@@ -77,6 +77,8 @@ La generación en CPU es compatible, pero tarda más durante la carga y la sínt
 
 Las referencias largas también se aceptan: ColVoice conserva el archivo en la biblioteca y prepara un fragmento limpio para el prompt de clonación. Una referencia corta, clara y sin música suele ser más estable que una grabación muy larga.
 
+ColVoice activa una mejora de pronunciación para español: expande abreviaturas frecuentes, porcentajes y números antes de sintetizar. `num2words` se instala automáticamente con `requirements-local.txt`; para palabras o nombres propios muy específicos, escribe la forma fonética deseada directamente en el guion.
+
 ## Exportar e importar voces guardadas
 
 Para mover tu biblioteca entre dos instalaciones de ColVoice:

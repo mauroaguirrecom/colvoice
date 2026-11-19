@@ -30,6 +30,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -74,6 +75,55 @@ _ALL_LANGUAGES = ["Auto"] + sorted(lang_display_name(n) for n in LANG_NAMES)
 _DEFAULT_LANGUAGE = "Spanish"
 _BRAND_NAME = "ColVoice"
 _BRAND_TITLE = "ColVoice — Voz Colombiana"
+
+_SPANISH_ABBREVIATIONS = (
+    (r"(?<!\w)EE\.?\s*UU\.?(?=\s|$|[,:;!?])", "Estados Unidos"),
+    (r"(?<!\w)EEUU(?=\s|$|[,:;!?])", "Estados Unidos"),
+    (r"(?<!\w)Srta\.(?=\s|$|[,:;!?])", "señorita"),
+    (r"(?<!\w)Sr\.(?=\s|$|[,:;!?])", "señor"),
+    (r"(?<!\w)Sra\.(?=\s|$|[,:;!?])", "señora"),
+    (r"(?<!\w)Dr\.(?=\s|$|[,:;!?])", "doctor"),
+    (r"(?<!\w)Dra\.(?=\s|$|[,:;!?])", "doctora"),
+    (r"(?<!\w)Ing\.(?=\s|$|[,:;!?])", "ingeniero"),
+    (r"(?<!\w)Prof\.(?=\s|$|[,:;!?])", "profesor"),
+    (r"(?<!\w)Pág\.(?=\s|$|[,:;!?])", "página"),
+    (r"(?<!\w)Núm\.(?=\s|$|[,:;!?])", "número"),
+    (r"(?<!\w)aprox\.(?=\s|$|[,:;!?])", "aproximadamente"),
+    (r"(?<!\w)etc\.(?=\s|$|[,:;!?])", "etcétera"),
+)
+_SPANISH_BRACKET_RE = re.compile(r"\[[^\[\]]*\]")
+
+
+def _is_spanish_language(language):
+    if not language:
+        return False
+    return str(language).strip().casefold() in {
+        "es",
+        "spa",
+        "spanish",
+        "español",
+        "castellano",
+    }
+
+
+def _prepare_spanish_text(text):
+    """Expand common Spanish abbreviations without touching control tags."""
+    if not text or not text.strip():
+        return text
+    protected = []
+
+    def _protect(match):
+        protected.append(match.group(0))
+        return f"__COLVOICE_TAG_{len(protected) - 1}__"
+
+    prepared = _SPANISH_BRACKET_RE.sub(_protect, text)
+    for pattern, replacement in _SPANISH_ABBREVIATIONS:
+        prepared = re.sub(pattern, replacement, prepared, flags=re.IGNORECASE)
+    prepared = re.sub(r"(?<=\d)\s*%", " por ciento", prepared)
+    prepared = re.sub(r"(?<=\d)\s*&\s*(?=\w)", " y ", prepared)
+    for index, tag in enumerate(protected):
+        prepared = prepared.replace(f"__COLVOICE_TAG_{index}__", tag)
+    return prepared
 
 
 # ---------------------------------------------------------------------------
@@ -637,9 +687,16 @@ def build_demo(
         else:
             lang = language
 
+        is_spanish = _is_spanish_language(language or _DEFAULT_LANGUAGE)
+        target_text = _prepare_spanish_text(text.strip()) if is_spanish else text.strip()
         kw: Dict[str, Any] = dict(
-            text=text.strip(), language=lang, generation_config=gen_config
+            text=target_text, language=lang, generation_config=gen_config
         )
+        if is_spanish:
+            # OmniVoice's optional normalizer expands numbers when num2words is
+            # installed; abbreviation expansion above also helps on CPU-only
+            # installs where the optional text package is unavailable.
+            kw["normalize_text"] = True
 
         if speed is not None and float(speed) != 1.0:
             kw["speed"] = float(speed)
@@ -2043,6 +2100,9 @@ def build_demo(
                             show_label=False,
                             lines=12,
                             placeholder="Escribe o pega aquí el texto que quieres convertir en voz...",
+                        )
+                        gr.HTML(
+                            "<p class='field-note'>Mejora de pronunciación activa para español: normaliza números, porcentajes y abreviaturas comunes antes de sintetizar.</p>"
                         )
                         gr.HTML("<div class='quick-start-label'>Empezar con un ejemplo</div>")
                         with gr.Row():
