@@ -5,7 +5,7 @@ Lee este archivo antes de explorar el repositorio. Evita leer `app/omnivoice/cli
 ## Usar ColVoice
 
 1. Si falta `.venv`, ejecuta `python setup_colvoice.py` y solicita confirmación antes de descargar los pesos.
-2. Inicia la app con el launcher disponible para el sistema.
+2. Inicia la app con `python run_omnivoice.py`.
 3. Comprueba la conexión: `python colvoice_cli.py health`.
 4. Consulta voces: `python colvoice_cli.py voices list`.
 5. Genera audio con `python colvoice_cli.py tts --voice "NOMBRE" --text "..." --output outputs/agente.wav`.

@@ -25,6 +25,7 @@ No publiques models/, voices/, outputs/, logs/ ni credenciales.
 python setup_colvoice.py --skip-model
 python setup_colvoice.py --cuda       # NVIDIA
 python setup_colvoice.py --cpu        # CPU o Apple Silicon/MPS
+python run_omnivoice.py
 python colvoice_cli.py health
 python colvoice_cli.py voices list
 python colvoice_cli.py tts --text "Hola desde ColVoice" --output outputs/agente.wav

@@ -47,7 +47,7 @@ python download_models.py
 
 El modelo no se guarda en Git porque sus archivos son grandes y tienen condiciones de uso propias. El script descarga desde la [fuente oficial de OmniVoice](https://huggingface.co/k2-fsa/OmniVoice).
 
-Inicia la aplicación con el launcher incluido en el repositorio y abre la dirección local que indique el proceso. Para integraciones automatizadas, comprueba primero:
+Inicia la aplicación con `python run_omnivoice.py` y abre la dirección local que indique el proceso. Para integraciones automatizadas, comprueba primero:
 
 ```bash
 python colvoice_cli.py health

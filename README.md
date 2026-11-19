@@ -23,8 +23,13 @@ python setup_colvoice.py --cpu        # CPU o Apple Silicon/MPS
 python setup_colvoice.py --skip-model # preparar dependencias sin descargar pesos
 ```
 
-Después inicia la aplicación con el launcher incluido en el repositorio y abre
-la dirección local que muestre el proceso. Los agentes deben comprobar la API
+Después inicia la aplicación con:
+
+```bash
+python run_omnivoice.py
+```
+
+Abre la dirección local que muestre el proceso. Los agentes deben comprobar la API
 antes de generar audio:
 
 ```bash
