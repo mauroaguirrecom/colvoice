@@ -24,6 +24,7 @@ Usage:
 """
 
 import argparse
+import asyncio
 import html
 import json
 import logging
@@ -31,13 +32,34 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 from typing import Any, Dict
 import uuid
+import zipfile
 
 import gradio as gr
 import numpy as np
 import soundfile as sf
 import torch
+
+# Gradio 6 creates an asyncio event loop while importing the Blocks object.
+# Some managed Windows environments block the Proactor socketpair used by
+# ``asyncio.new_event_loop()``. Locks/events bind to the loop when first used,
+# so constructing them directly keeps ColVoice responsive on those systems.
+if os.name == "nt":
+    import gradio.queueing as _gradio_queueing
+    import gradio.utils as _gradio_utils
+
+    def _colvoice_safe_lock():
+        return asyncio.Lock()
+
+    def _colvoice_safe_stop_event():
+        return asyncio.Event()
+
+    _gradio_queueing.safe_get_lock = _colvoice_safe_lock
+    _gradio_queueing.safe_get_stop_event = _colvoice_safe_stop_event
+    _gradio_utils.safe_get_lock = _colvoice_safe_lock
+    _gradio_utils.safe_get_stop_event = _colvoice_safe_stop_event
 
 from omnivoice import OmniVoice, OmniVoiceGenerationConfig, VoiceClonePrompt
 from omnivoice.utils.audio import load_waveform, trim_long_audio
@@ -268,6 +290,188 @@ def build_demo(
             encoding="utf-8",
         )
         temporary_path.replace(voice_index_path)
+
+    def _export_voice_library():
+        """Create a portable ZIP containing all saved voices and references."""
+        entries = _read_voice_index()
+        if not entries:
+            raise ValueError("La biblioteca no contiene voces para exportar.")
+
+        export_dir = voice_library.parent / "outputs"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = export_dir / f"colvoice-voces-{uuid.uuid4().hex[:10]}.zip"
+        manifest = {
+            "format": "colvoice-voice-library",
+            "version": 1,
+            "voices": [],
+        }
+        with zipfile.ZipFile(
+            archive_path,
+            mode="w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=6,
+        ) as archive:
+            for entry in entries:
+                prompt_path = voice_library / entry["file"]
+                if not prompt_path.is_file():
+                    continue
+                prompt_member = f"voices/{prompt_path.name}"
+                archive.write(prompt_path, prompt_member)
+                exported = {
+                    "name": entry["name"],
+                    "prompt": prompt_member,
+                    "reference_text_manual": bool(
+                        entry.get("reference_text_manual", False)
+                    ),
+                }
+                reference_name = entry.get("reference_audio")
+                reference_path = (
+                    voice_library / reference_name if reference_name else None
+                )
+                if reference_path and reference_path.is_file():
+                    reference_member = f"voices/{reference_path.name}"
+                    archive.write(reference_path, reference_member)
+                    exported["reference_audio"] = reference_member
+                manifest["voices"].append(exported)
+            archive.writestr(
+                "manifest.json",
+                json.dumps(manifest, ensure_ascii=False, indent=2),
+            )
+
+        if not manifest["voices"]:
+            archive_path.unlink(missing_ok=True)
+            raise ValueError("No se encontraron archivos válidos para exportar.")
+        return str(archive_path)
+
+    def _import_voice_library(archive_path):
+        """Import a ColVoice ZIP, renaming conflicts without overwriting voices."""
+        if not archive_path:
+            raise ValueError("Selecciona un archivo ZIP de ColVoice.")
+        candidate = getattr(archive_path, "path", archive_path)
+        archive_path = Path(str(candidate))
+        if not archive_path.is_file() or not zipfile.is_zipfile(archive_path):
+            raise ValueError("El archivo seleccionado no es un ZIP válido de ColVoice.")
+
+        max_uncompressed_size = 2 * 1024 * 1024 * 1024
+        imported = 0
+        skipped = []
+        existing_names = {entry["name"].casefold() for entry in _read_voice_index()}
+        new_entries = _read_voice_index()
+
+        with zipfile.ZipFile(archive_path, mode="r") as archive:
+            members = archive.infolist()
+            if sum(info.file_size for info in members) > max_uncompressed_size:
+                raise ValueError("El ZIP supera el límite de 2 GB sin comprimir.")
+            for info in members:
+                member = info.filename.replace("\\", "/")
+                member_path = Path(member)
+                if member_path.is_absolute() or ".." in member_path.parts:
+                    raise ValueError("El ZIP contiene una ruta no segura.")
+
+            if "manifest.json" not in archive.namelist():
+                raise ValueError(
+                    "El ZIP no contiene un manifiesto de ColVoice. "
+                    "Exporta la biblioteca desde Mis voces."
+                )
+            manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+            if manifest.get("format") != "colvoice-voice-library":
+                raise ValueError("El archivo no pertenece a una biblioteca de ColVoice.")
+            voices = manifest.get("voices")
+            if not isinstance(voices, list):
+                raise ValueError("El manifiesto de voces no es válido.")
+
+            archive_names = set(archive.namelist())
+            for voice in voices:
+                if not isinstance(voice, dict):
+                    skipped.append("entrada inválida")
+                    continue
+                display_name = str(voice.get("name", "")).strip()
+                prompt_member = str(voice.get("prompt", ""))
+                reference_member = str(voice.get("reference_audio", ""))
+                if (
+                    not display_name
+                    or prompt_member not in archive_names
+                    or not prompt_member.startswith("voices/")
+                ):
+                    skipped.append(display_name or "entrada sin nombre")
+                    continue
+
+                base_name = display_name[:60]
+                imported_name = base_name
+                suffix_index = 2
+                while imported_name.casefold() in existing_names:
+                    imported_name = f"{base_name[: max(1, 60 - len(str(suffix_index)) - 12)]} (importada {suffix_index})"
+                    suffix_index += 1
+
+                prompt_temp = None
+                reference_temp = None
+                final_prompt = None
+                final_reference = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        prefix=".colvoice-import-",
+                        suffix=".pt",
+                        dir=voice_library,
+                        delete=False,
+                    ) as temporary:
+                        prompt_temp = Path(temporary.name)
+                        temporary.write(archive.read(prompt_member))
+                    VoiceClonePrompt.load(str(prompt_temp))
+
+                    voice_id = uuid.uuid4().hex
+                    final_prompt = voice_library / f"{voice_id}.pt"
+                    shutil.copyfile(prompt_temp, final_prompt)
+                    if reference_member:
+                        if (
+                            reference_member not in archive_names
+                            or not reference_member.startswith("voices/")
+                        ):
+                            raise ValueError("referencia ausente")
+                        with tempfile.NamedTemporaryFile(
+                            prefix=".colvoice-import-",
+                            suffix=".wav",
+                            dir=voice_library,
+                            delete=False,
+                        ) as temporary:
+                            reference_temp = Path(temporary.name)
+                            temporary.write(archive.read(reference_member))
+                        sf.info(str(reference_temp))
+                        final_reference = voice_library / f"{voice_id}_reference.wav"
+                        shutil.copyfile(reference_temp, final_reference)
+
+                    imported_entry = {
+                        "name": imported_name,
+                        "file": final_prompt.name,
+                        "reference_text_manual": bool(
+                            voice.get("reference_text_manual", False)
+                        ),
+                    }
+                    if final_reference:
+                        imported_entry["reference_audio"] = final_reference.name
+                    new_entries.append(imported_entry)
+                    existing_names.add(imported_name.casefold())
+                    imported += 1
+                except Exception as error:
+                    skipped.append(f"{display_name}: {error}")
+                    if final_prompt:
+                        final_prompt.unlink(missing_ok=True)
+                    if final_reference:
+                        final_reference.unlink(missing_ok=True)
+                finally:
+                    if prompt_temp:
+                        prompt_temp.unlink(missing_ok=True)
+                    if reference_temp:
+                        reference_temp.unlink(missing_ok=True)
+
+        if not imported:
+            detail = "; ".join(skipped[:3])
+            raise ValueError(f"No se importó ninguna voz. {detail}")
+        _write_voice_index(new_entries)
+        noun = "voz" if imported == 1 else "voces"
+        message = f"Se importaron {imported} {noun}."
+        if skipped:
+            message += f" Se omitieron {len(skipped)} entradas."
+        return _voice_library_markup(), gr.update(choices=_saved_voice_choices()), message
 
     def _saved_voice_choices():
         return [no_saved_voice] + [entry["name"] for entry in _read_voice_index()]
@@ -2653,6 +2857,26 @@ def build_demo(
                             lines=3,
                             elem_classes="status-field",
                         )
+                        with gr.Accordion("Transferir voces entre instalaciones", open=True):
+                            gr.HTML(
+                                "<p class='field-note'>Exporta tus prompts y referencias como un ZIP para llevarlos a otro ColVoice. Las voces importadas conservan su nombre; los duplicados se renombran automáticamente.</p>"
+                            )
+                            library_export = gr.DownloadButton(
+                                "Exportar biblioteca (.zip)",
+                                value=None,
+                                interactive=True,
+                                elem_classes="utility-button",
+                            )
+                            library_import_file = gr.File(
+                                label="Archivo de biblioteca ColVoice",
+                                file_types=[".zip"],
+                                type="filepath",
+                            )
+                            library_import = gr.Button(
+                                "Importar biblioteca",
+                                variant="secondary",
+                                elem_classes="utility-button",
+                            )
 
                 def _save_library_voice_fn(name, ref_audio, ref_text):
                     try:
@@ -2698,6 +2922,15 @@ def build_demo(
                         library_ref_text,
                         library_status,
                     ],
+                )
+                library_export.click(
+                    _export_voice_library,
+                    outputs=[library_export],
+                )
+                library_import.click(
+                    _import_voice_library,
+                    inputs=[library_import_file],
+                    outputs=[library_html, library_voice, library_status],
                 )
 
             def _switch_workspace(

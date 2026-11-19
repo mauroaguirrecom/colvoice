@@ -77,6 +77,17 @@ La generación en CPU es compatible, pero tarda más durante la carga y la sínt
 
 Las referencias largas también se aceptan: ColVoice conserva el archivo en la biblioteca y prepara un fragmento limpio para el prompt de clonación. Una referencia corta, clara y sin música suele ser más estable que una grabación muy larga.
 
+## Exportar e importar voces guardadas
+
+Para mover tu biblioteca entre dos instalaciones de ColVoice:
+
+1. Abre **Mis voces**.
+2. Pulsa **Exportar biblioteca (.zip)** y guarda el archivo.
+3. En la otra instalación, abre **Mis voces** y selecciona el ZIP en **Archivo de biblioteca ColVoice**.
+4. Pulsa **Importar biblioteca**.
+
+El ZIP contiene los prompts de clonación, las referencias de audio y los nombres de las voces. Las voces existentes nunca se sobrescriben: si hay un nombre repetido, ColVoice lo importa como `Nombre (importada 2)`.
+
 ## API de clonación
 
 El paquete Python interno conserva el nombre `omnivoice` para mantener compatibilidad con el motor original. Un ejemplo avanzado es:
