@@ -3,6 +3,7 @@ import argparse
 import atexit
 import os
 from pathlib import Path
+import socket
 
 ROOT = Path(__file__).resolve().parent
 os.environ.setdefault("HF_HOME", str(ROOT / ".cache" / "huggingface"))
@@ -17,6 +18,23 @@ from omnivoice.cli.demo import build_demo
 from colvoice_api import start_api_server
 
 
+def _assert_port_available(port: int) -> None:
+    """Fail before loading the model when the UI port cannot be bound."""
+    if port == 0:
+        return
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        probe.bind(("127.0.0.1", port))
+    except OSError as error:
+        raise RuntimeError(
+            f"El puerto {port} no está disponible. Cierra otra instancia de ColVoice "
+            f"o inicia con --port otro-puerto. Detalle: {error}"
+        ) from error
+    finally:
+        probe.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -25,6 +43,8 @@ def main():
     parser.add_argument("--api-port", type=int, default=8002)
     parser.add_argument("--no-api", action="store_true", help="Disable the local agent API.")
     args = parser.parse_args()
+
+    _assert_port_available(args.port)
 
     pid_path = ROOT / "logs" / "server.pid"
     pid_path.parent.mkdir(parents=True, exist_ok=True)
