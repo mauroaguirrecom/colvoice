@@ -66,6 +66,7 @@ from omnivoice import OmniVoice, OmniVoiceGenerationConfig, VoiceClonePrompt
 from omnivoice.utils.audio import load_waveform, trim_long_audio
 from omnivoice.utils.common import get_best_device
 from omnivoice.utils.lang_map import LANG_NAMES, lang_display_name
+from colvoice_quality import compare_transcripts
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +124,31 @@ def _prepare_spanish_text(text):
     prepared = re.sub(r"(?<=\d)\s*&\s*(?=\w)", " y ", prepared)
     for index, tag in enumerate(protected):
         prepared = prepared.replace(f"__COLVOICE_TAG_{index}__", tag)
+    return prepared
+
+
+def _apply_pronunciation_dictionary(text, dictionary):
+    """Apply per-voice replacements while preserving OmniVoice control tags."""
+    if not text or not dictionary:
+        return text
+    protected = []
+
+    def _protect(match):
+        protected.append(match.group(0))
+        return f"__COLVOICE_PRON_TAG_{len(protected) - 1}__"
+
+    prepared = _SPANISH_BRACKET_RE.sub(_protect, text)
+    for source, replacement in sorted(
+        dictionary.items(), key=lambda item: len(item[0]), reverse=True
+    ):
+        source = str(source).strip()
+        replacement = str(replacement).strip()
+        if not source or not replacement:
+            continue
+        pattern = r"(?<!\w)" + re.escape(source) + r"(?!\w)"
+        prepared = re.sub(pattern, replacement, prepared, flags=re.IGNORECASE)
+    for index, tag in enumerate(protected):
+        prepared = prepared.replace(f"__COLVOICE_PRON_TAG_{index}__", tag)
     return prepared
 
 
@@ -330,6 +356,15 @@ def build_demo(
                     normalized_entry["reference_text_manual"] = bool(
                         entry["reference_text_manual"]
                     )
+                pronunciation = entry.get("pronunciation", {})
+                if isinstance(pronunciation, dict):
+                    normalized_pronunciation = {
+                        str(source).strip(): str(replacement).strip()
+                        for source, replacement in pronunciation.items()
+                        if str(source).strip() and str(replacement).strip()
+                    }
+                    if normalized_pronunciation:
+                        normalized_entry["pronunciation"] = normalized_pronunciation
                 entries.append(normalized_entry)
         return sorted(entries, key=lambda item: item["name"].casefold())
 
@@ -373,6 +408,7 @@ def build_demo(
                     "reference_text_manual": bool(
                         entry.get("reference_text_manual", False)
                     ),
+                    "pronunciation": dict(entry.get("pronunciation", {})),
                 }
                 reference_name = entry.get("reference_audio")
                 reference_path = (
@@ -496,6 +532,15 @@ def build_demo(
                             voice.get("reference_text_manual", False)
                         ),
                     }
+                    pronunciation = voice.get("pronunciation", {})
+                    if isinstance(pronunciation, dict):
+                        normalized_pronunciation = {
+                            str(source).strip()[:80]: str(replacement).strip()[:120]
+                            for source, replacement in pronunciation.items()
+                            if str(source).strip() and str(replacement).strip()
+                        }
+                        if normalized_pronunciation:
+                            imported_entry["pronunciation"] = normalized_pronunciation
                     if final_reference:
                         imported_entry["reference_audio"] = final_reference.name
                     new_entries.append(imported_entry)
@@ -521,10 +566,74 @@ def build_demo(
         message = f"Se importaron {imported} {noun}."
         if skipped:
             message += f" Se omitieron {len(skipped)} entradas."
-        return _voice_library_markup(), gr.update(choices=_saved_voice_choices()), message
+        return (
+            _voice_library_markup(),
+            gr.update(choices=_saved_voice_choices()),
+            "",
+            message,
+        )
 
     def _saved_voice_choices():
         return [no_saved_voice] + [entry["name"] for entry in _read_voice_index()]
+
+    def _get_pronunciation_dictionary(name):
+        if not name or name == no_saved_voice:
+            return {}
+        for entry in _read_voice_index():
+            if entry["name"] == name:
+                return dict(entry.get("pronunciation", {}))
+        return {}
+
+    def _format_pronunciation_dictionary(dictionary):
+        return "\n".join(
+            f"{source} = {replacement}"
+            for source, replacement in sorted(
+                dictionary.items(), key=lambda item: item[0].casefold()
+            )
+        )
+
+    def _parse_pronunciation_dictionary(raw_text):
+        dictionary = {}
+        invalid = []
+        for line_number, line in enumerate((raw_text or "").splitlines(), 1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                invalid.append(str(line_number))
+                continue
+            source, replacement = (part.strip() for part in line.split("=", 1))
+            if not source or not replacement:
+                invalid.append(str(line_number))
+                continue
+            dictionary[source[:80]] = replacement[:120]
+        if invalid:
+            raise ValueError(
+                "Líneas inválidas: " + ", ".join(invalid) + ". Usa el formato palabra = pronunciación."
+            )
+        if len(dictionary) > 100:
+            raise ValueError("Cada voz puede tener hasta 100 correcciones de pronunciación.")
+        return dictionary
+
+    def _load_pronunciation_dictionary(name):
+        return _format_pronunciation_dictionary(_get_pronunciation_dictionary(name))
+
+    def _save_pronunciation_dictionary(name, raw_text):
+        if not name or name == no_saved_voice:
+            raise ValueError("Selecciona una voz guardada antes de editar su diccionario.")
+        dictionary = _parse_pronunciation_dictionary(raw_text)
+        entries = _read_voice_index()
+        for entry in entries:
+            if entry["name"] == name:
+                if dictionary:
+                    entry["pronunciation"] = dictionary
+                else:
+                    entry.pop("pronunciation", None)
+                _write_voice_index(entries)
+                return _format_pronunciation_dictionary(dictionary), (
+                    f"Diccionario de pronunciación guardado para '{name}'."
+                )
+        raise ValueError(f"No existe una voz guardada llamada '{name}'.")
 
     def _load_saved_voice(name):
         if not name or name == no_saved_voice:
@@ -668,6 +777,7 @@ def build_demo(
         mode,
         ref_text=None,
         voice_clone_prompt=None,
+        pronunciation=None,
     ):
         if not text or not text.strip():
             return None, "Please enter the text to synthesize."
@@ -689,6 +799,8 @@ def build_demo(
 
         is_spanish = _is_spanish_language(language or _DEFAULT_LANGUAGE)
         target_text = _prepare_spanish_text(text.strip()) if is_spanish else text.strip()
+        if is_spanish and pronunciation:
+            target_text = _apply_pronunciation_dictionary(target_text, pronunciation)
         kw: Dict[str, Any] = dict(
             text=target_text, language=lang, generation_config=gen_config
         )
@@ -772,6 +884,42 @@ def build_demo(
         audio_path = _validate_audio_file(audio_path, "audio original")
         waveform, sample_rate = load_waveform(audio_path)
         return float(waveform.shape[-1]) / float(sample_rate)
+
+    def _evaluate_quality_fn(audio_path, expected_text):
+        """Compare the expected script with an ASR transcript from a generated WAV."""
+        try:
+            expected = (expected_text or "").strip()
+            if not expected:
+                raise ValueError("Escribe el texto esperado para evaluar el audio.")
+            audio_path = _validate_audio_file(audio_path, "audio para evaluar")
+            transcript = _transcribe_audio_file(audio_path)
+            metrics = compare_transcripts(expected, transcript)
+            duration = _audio_duration_seconds(audio_path)
+            score = metrics["accuracy_percent"]
+            badge = "✅" if score >= 90 else ("⚠️" if score >= 75 else "❌")
+            missing = ", ".join(metrics["missing_words"]) or "ninguna"
+            unexpected = ", ".join(metrics["unexpected_words"]) or "ninguna"
+            report = (
+                f"## {badge} Precisión estimada: **{score:.1f}%**\n\n"
+                f"**WER:** {metrics['wer_percent']:.1f}% · "
+                f"**Duración:** {duration:.1f} s\n\n"
+                f"| Métrica | Resultado |\n|---|---:|\n"
+                f"| Palabras esperadas | {metrics['reference_words']} |\n"
+                f"| Palabras reconocidas | {metrics['recognized_words']} |\n"
+                f"| Sustituciones | {metrics['substitutions']} |\n"
+                f"| Omisiones | {metrics['deletions']} |\n"
+                f"| Palabras extra | {metrics['insertions']} |\n\n"
+                f"**Posibles omisiones o errores:** {missing}\n\n"
+                f"**Palabras inesperadas:** {unexpected}\n\n"
+                f"> Transcripción detectada: {transcript or '(vacía)'}"
+            )
+            status = (
+                "Evaluación completada. Usa las palabras detectadas como guía para "
+                "ajustar el diccionario de pronunciación de esta voz."
+            )
+            return report, status
+        except Exception as error:
+            return "### No se pudo evaluar el audio", f"Error: {type(error).__name__}: {error}"
 
     def _save_voice_to_library(name, ref_audio, ref_text):
         display_name = (name or "").strip()
@@ -1286,6 +1434,8 @@ def build_demo(
     #studio-nav label:nth-child(3)::before { content: "⚡"; font-size: 15px; margin-right: 10px; }
     #studio-nav label:nth-child(4)::before { content: "🎨"; font-size: 15px; margin-right: 10px; }
     #studio-nav label:nth-child(5)::before { content: "📁"; font-size: 15px; margin-right: 10px; }
+    #studio-nav label:nth-child(6)::before { content: "🔎"; font-size: 15px; margin-right: 10px; }
+    #studio-nav label:nth-child(7)::before { content: "⚙️"; font-size: 15px; margin-right: 10px; }
 
     #studio-nav label:hover {
         background: rgba(255, 255, 255, 0.05) !important;
@@ -1936,6 +2086,8 @@ def build_demo(
                     "Voice Changer",
                     "Diseñar voz",
                     "Mis voces",
+                    "Evaluador de calidad",
+                    "Configuración / API",
                 ],
                 value="Texto a voz",
                 label="",
@@ -2225,6 +2377,7 @@ def build_demo(
                         saved_prompt = _load_saved_voice(saved_voice)
                     except Exception as e:
                         return None, f"Error: {type(e).__name__}: {e}"
+                    pronunciation = _get_pronunciation_dictionary(saved_voice)
                     return _gen(
                         text,
                         lang,
@@ -2240,6 +2393,7 @@ def build_demo(
                         mode="clone",
                         ref_text=ref_text or None,
                         voice_clone_prompt=saved_prompt,
+                        pronunciation=pronunciation,
                     )
 
                 def _save_clone_voice_fn(name, ref_audio, ref_text):
@@ -2462,6 +2616,7 @@ def build_demo(
                             "audio original",
                         )
                         saved_prompt = _load_saved_voice(saved_voice)
+                        pronunciation = _get_pronunciation_dictionary(saved_voice)
                         if saved_prompt is None and not ref_audio:
                             return None, source_text or "", ref_text or "", (
                                 "Selecciona una voz guardada o carga el audio "
@@ -2503,6 +2658,7 @@ def build_demo(
                             mode="clone",
                             ref_text=reference_transcript,
                             voice_clone_prompt=saved_prompt,
+                            pronunciation=pronunciation,
                         )
                         if audio is None:
                             return (
@@ -2917,6 +3073,20 @@ def build_demo(
                             lines=3,
                             elem_classes="status-field",
                         )
+                        with gr.Accordion("Diccionario de pronunciación", open=True):
+                            gr.HTML(
+                                "<p class='field-note'>Una corrección por línea. Ejemplo: <code>Bancolombia = ban-co-lom-bia</code>. Se aplica solo a la voz seleccionada.</p>"
+                            )
+                            library_pronunciation = gr.Textbox(
+                                label="Palabra = pronunciación",
+                                lines=6,
+                                placeholder="Bancolombia = ban-co-lom-bia\nColVoice = col vois",
+                            )
+                            library_save_pronunciation = gr.Button(
+                                "Guardar pronunciaciones",
+                                variant="secondary",
+                                elem_classes="utility-button",
+                            )
                         with gr.Accordion("Transferir voces entre instalaciones", open=True):
                             gr.HTML(
                                 "<p class='field-note'>Exporta tus prompts y referencias como un ZIP para llevarlos a otro ColVoice. Las voces importadas conservan su nombre; los duplicados se renombran automáticamente.</p>"
@@ -2952,6 +3122,7 @@ def build_demo(
                                 value=saved_name,
                             ),
                             "",
+                            "",
                             None,
                             transcript,
                             f"Voz '{saved_name}' guardada y lista para usar.",
@@ -2960,6 +3131,7 @@ def build_demo(
                         return (
                             _voice_library_markup(),
                             gr.update(),
+                            "",
                             name or "",
                             ref_audio,
                             ref_text or "",
@@ -2971,12 +3143,23 @@ def build_demo(
                     inputs=[library_voice],
                     outputs=[footer_audio, library_status],
                 )
+                library_voice.change(
+                    _load_pronunciation_dictionary,
+                    inputs=[library_voice],
+                    outputs=[library_pronunciation],
+                )
+                library_save_pronunciation.click(
+                    _save_pronunciation_dictionary,
+                    inputs=[library_voice, library_pronunciation],
+                    outputs=[library_pronunciation, library_status],
+                )
                 library_save.click(
                     _save_library_voice_fn,
                     inputs=[library_voice_name, library_ref_audio, library_ref_text],
                     outputs=[
                         library_html,
                         library_voice,
+                        library_pronunciation,
                         library_voice_name,
                         library_ref_audio,
                         library_ref_text,
@@ -2990,7 +3173,77 @@ def build_demo(
                 library_import.click(
                     _import_voice_library,
                     inputs=[library_import_file],
-                    outputs=[library_html, library_voice, library_status],
+                    outputs=[
+                        library_html,
+                        library_voice,
+                        library_pronunciation,
+                        library_status,
+                    ],
+                )
+
+            # ============================================================== 
+            # Quality evaluator
+            # ============================================================== 
+            with gr.Group(visible=False, elem_classes="studio-view") as quality_view:
+                gr.Markdown(
+                    """## Evaluador de calidad
+
+Sube un audio generado y pega el texto que debía pronunciar. ColVoice lo transcribe
+con su ASR local y calcula una precisión estimada palabra por palabra para encontrar
+omisiones, sustituciones y palabras inesperadas.
+"""
+                )
+                with gr.Row():
+                    quality_audio = gr.Audio(
+                        label="Audio para evaluar",
+                        type="filepath",
+                    )
+                    quality_expected_text = gr.Textbox(
+                        label="Texto esperado",
+                        placeholder="Pega aquí exactamente el guion que debía decir la voz...",
+                        lines=6,
+                    )
+                quality_button = gr.Button("Evaluar audio", variant="primary")
+                quality_report = gr.Markdown(
+                    "La evaluación aparecerá aquí después de analizar el audio."
+                )
+                quality_status = gr.Textbox(
+                    label="Estado",
+                    interactive=False,
+                )
+                quality_button.click(
+                    _evaluate_quality_fn,
+                    inputs=[quality_audio, quality_expected_text],
+                    outputs=[quality_report, quality_status],
+                )
+
+            # ============================================================== 
+            # Agent integrations
+            # ============================================================== 
+            with gr.Group(visible=False, elem_classes="studio-view") as config_view:
+                gr.Markdown(
+                    """## Configuración e integraciones
+
+ColVoice expone una API local pequeña para que Codex, Claude Code u otro agente pueda generar audio sin leer toda la interfaz.
+
+**API:** `http://127.0.0.1:8002/v1`
+
+```powershell
+# Verificar que ColVoice está listo
+.venv/Scripts/python.exe colvoice_cli.py health
+
+# Listar voces disponibles
+.venv/Scripts/python.exe colvoice_cli.py voices list
+
+# Generar usando una voz guardada
+.venv/Scripts/python.exe colvoice_cli.py tts --voice "Narradora" --text "Hola desde ColVoice" --output salida.wav
+
+# Evaluar pronunciación y detectar omisiones
+.venv/Scripts/python.exe colvoice_cli.py evaluate --audio salida.wav --text "Hola desde ColVoice"
+```
+
+Para consultar el contrato completo, abre `AGENTS.md` o `API.md` en la raíz del proyecto. La API solo escucha en `localhost` y no publica el modelo ni los audios fuera de este equipo.
+"""
                 )
 
             def _switch_workspace(
@@ -3012,6 +3265,8 @@ def build_demo(
                     gr.update(visible=section == "Voice Changer"),
                     gr.update(visible=section == "Diseñar voz"),
                     gr.update(visible=section == "Mis voces"),
+                    gr.update(visible=section == "Evaluador de calidad"),
+                    gr.update(visible=section == "Configuración / API"),
                     refresh_choice(current_clone_voice),
                     refresh_choice(current_audio_voice),
                     refresh_choice(current_direct_voice),
@@ -3033,6 +3288,8 @@ def build_demo(
                     changer_view,
                     design_view,
                     library_view,
+                    quality_view,
+                    config_view,
                     vc_saved_voice,
                     st_saved_voice,
                     direct_saved_voice,

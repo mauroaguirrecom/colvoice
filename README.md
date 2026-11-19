@@ -17,11 +17,14 @@ Voice Changer es opcional: descarga Seed-VC desde su proyecto upstream y colóca
 
 Consulta [INSTALACION.md](INSTALACION.md) para la instalación completa con NVIDIA/CUDA o CPU, descarga de modelos, uso de la API, clonación con texto pronunciado opcional y control de generación.
 
+Para conectar Codex, Claude Code u otro agente sin leer el código completo, usa [AGENTS.md](AGENTS.md), [API.md](API.md) y `colvoice_cli.py`. La app inicia una API local en `http://127.0.0.1:8002` junto con la interfaz.
+
 ## Funciones
 
 - Texto a voz con español colombiano como configuración inicial.
 - Clonación de voz con referencia corta o grabación larga recortada automáticamente.
 - Texto pronunciado opcional con transcripción automática mediante Whisper.
+- Evaluador de calidad palabra por palabra para detectar omisiones y pronunciaciones problemáticas.
 - Voice Changer para conservar ritmo, pausas y actuación de una grabación.
 - Biblioteca local de voces y descarga de audios generados.
 

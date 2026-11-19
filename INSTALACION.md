@@ -121,6 +121,13 @@ prompt = VoiceClonePrompt.load("mi-voz.pt")
 audio = model.generate(text="Un nuevo guion.", language="es", voice_clone_prompt=prompt)
 ```
 
+### Evaluar la calidad de una voz
+
+Desde la app abre **Evaluador de calidad**, sube el WAV generado y pega el guion
+esperado. El informe muestra precisión estimada, WER y las palabras omitidas o
+sustituidas; esas palabras pueden corregirse en el diccionario de pronunciación de
+**Mis voces**. También está disponible para agentes mediante `POST /v1/evaluate`.
+
 ## Diseño de voz y voz automática
 
 ```python
@@ -156,6 +163,8 @@ Las etiquetas no verbales y las correcciones fonéticas pertenecen al motor upst
 ## Herramientas relacionadas
 
 - [README principal](README.md): resumen del producto y funciones.
+- [API para agentes](API.md): endpoints JSON compactos y comandos CLI para Codex o Claude Code.
+- [AGENTS.md](AGENTS.md): contexto operativo breve para evitar leer todo el código.
 - [Voice Changer](VOICE-CHANGER.md): conversión directa opcional con Seed-VC.
 - [Créditos y licencias](CREDITS.md): atribución, pesos y condiciones de redistribución.
 - [Repositorio upstream OmniVoice](https://github.com/k2-fsa/OmniVoice): API, entrenamiento y evaluación del motor.
