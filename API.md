@@ -48,7 +48,8 @@ La API solo escucha en `127.0.0.1`; no incluye autenticación ni debe exponerse 
 ## Evaluar calidad de un audio
 
 El evaluador usa el ASR local para comparar el audio con el guion esperado. Devuelve
-precisión estimada, WER, omisiones, sustituciones y palabras inesperadas.
+precisión estimada, WER, omisiones, sustituciones, palabras inesperadas y salud básica
+de la señal (pico, RMS, silencio y clipping).
 
 ```powershell
 $body = @{

@@ -66,7 +66,7 @@ from omnivoice import OmniVoice, OmniVoiceGenerationConfig, VoiceClonePrompt
 from omnivoice.utils.audio import load_waveform, trim_long_audio
 from omnivoice.utils.common import get_best_device
 from omnivoice.utils.lang_map import LANG_NAMES, lang_display_name
-from colvoice_quality import compare_transcripts
+from colvoice_quality import analyze_audio_signal, compare_transcripts
 
 
 # ---------------------------------------------------------------------------
@@ -894,7 +894,8 @@ def build_demo(
             audio_path = _validate_audio_file(audio_path, "audio para evaluar")
             transcript = _transcribe_audio_file(audio_path)
             metrics = compare_transcripts(expected, transcript)
-            duration = _audio_duration_seconds(audio_path)
+            waveform, sample_rate = load_waveform(audio_path)
+            signal = analyze_audio_signal(waveform, sample_rate)
             score = metrics["accuracy_percent"]
             badge = "✅" if score >= 90 else ("⚠️" if score >= 75 else "❌")
             missing = ", ".join(metrics["missing_words"]) or "ninguna"
@@ -902,13 +903,16 @@ def build_demo(
             report = (
                 f"## {badge} Precisión estimada: **{score:.1f}%**\n\n"
                 f"**WER:** {metrics['wer_percent']:.1f}% · "
-                f"**Duración:** {duration:.1f} s\n\n"
+                f"**Duración:** {signal['duration_seconds']:.1f} s\n\n"
                 f"| Métrica | Resultado |\n|---|---:|\n"
                 f"| Palabras esperadas | {metrics['reference_words']} |\n"
                 f"| Palabras reconocidas | {metrics['recognized_words']} |\n"
                 f"| Sustituciones | {metrics['substitutions']} |\n"
                 f"| Omisiones | {metrics['deletions']} |\n"
                 f"| Palabras extra | {metrics['insertions']} |\n\n"
+                f"**Señal:** pico {signal['peak_dbfs']:.1f} dBFS · RMS "
+                f"{signal['rms_dbfs']:.1f} dBFS · silencio {signal['silence_percent']:.1f}% · "
+                f"clipping {signal['clipping_percent']:.3f}%\n\n"
                 f"**Posibles omisiones o errores:** {missing}\n\n"
                 f"**Palabras inesperadas:** {unexpected}\n\n"
                 f"> Transcripción detectada: {transcript or '(vacía)'}"

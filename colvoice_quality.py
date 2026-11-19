@@ -5,12 +5,39 @@ from __future__ import annotations
 import re
 import unicodedata
 
+import numpy as np
+
 
 def normalize_words(text: str) -> list[str]:
     text = unicodedata.normalize("NFKD", text or "")
     text = "".join(char for char in text if not unicodedata.combining(char))
     text = text.casefold().replace("’", "'")
     return re.findall(r"[\w']+", text, flags=re.UNICODE)
+
+
+def analyze_audio_signal(waveform, sample_rate: int) -> dict:
+    """Return lightweight signal-health indicators for a generated waveform."""
+    samples = np.asarray(waveform, dtype=np.float32)
+    if samples.ndim > 1:
+        samples = np.mean(samples, axis=0)
+    samples = samples.reshape(-1)
+    if not samples.size:
+        return {
+            "duration_seconds": 0.0,
+            "peak_dbfs": -120.0,
+            "rms_dbfs": -120.0,
+            "clipping_percent": 0.0,
+            "silence_percent": 100.0,
+        }
+    peak = float(np.max(np.abs(samples)))
+    rms = float(np.sqrt(np.mean(np.square(samples))))
+    return {
+        "duration_seconds": round(float(samples.size) / float(sample_rate), 3),
+        "peak_dbfs": round(max(-120.0, 20.0 * np.log10(max(peak, 1e-6))), 1),
+        "rms_dbfs": round(max(-120.0, 20.0 * np.log10(max(rms, 1e-6))), 1),
+        "clipping_percent": round(float(np.mean(np.abs(samples) >= 0.999)) * 100.0, 3),
+        "silence_percent": round(float(np.mean(np.abs(samples) < 0.005)) * 100.0, 1),
+    }
 
 
 def compare_transcripts(reference: str, hypothesis: str) -> dict:

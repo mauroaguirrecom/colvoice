@@ -19,7 +19,7 @@ import soundfile as sf
 
 from omnivoice import OmniVoiceGenerationConfig, VoiceClonePrompt
 from omnivoice.utils.audio import load_waveform
-from colvoice_quality import compare_transcripts
+from colvoice_quality import analyze_audio_signal, compare_transcripts
 from omnivoice.cli.demo import (
     _apply_pronunciation_dictionary,
     _is_spanish_language,
@@ -189,7 +189,7 @@ class _ColVoiceService:
         return {
             "audio_file": str(audio_path),
             "transcript": transcript,
-            "duration_seconds": round(float(waveform.shape[-1]) / float(sample_rate), 3),
+            **analyze_audio_signal(waveform, sample_rate),
             **metrics,
         }
 
