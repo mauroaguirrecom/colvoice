@@ -1,71 +1,65 @@
 # Instalación y uso de ColVoice
 
-ColVoice es una interfaz local para generar voz, clonar referencias y transformar grabaciones. Está optimizada para español colombiano y funciona también con español mexicano y latinoamericano. La aplicación se ejecuta en Windows, guarda las voces en el equipo y usa el motor OmniVoice como dependencia técnica.
+ColVoice es una interfaz local para generar voz, clonar referencias y transformar grabaciones. Está optimizada para español colombiano y funciona también con español mexicano y latinoamericano. Es compatible con Windows, Linux y macOS; guarda las voces en el equipo y usa el motor OmniVoice como dependencia técnica.
 
 ## Requisitos
 
-- Windows 10 u 11 de 64 bits.
+- Windows, Linux o macOS de 64 bits.
 - Python 3.10 o superior.
-- NVIDIA GPU con CUDA para la ruta recomendada. También puedes usar CPU con tiempos de generación mayores.
+- GPU NVIDIA con CUDA para la ruta de mayor velocidad. También puedes usar CPU o Apple Silicon/MPS con tiempos de generación mayores.
 - Espacio libre para el entorno Python, la caché de Whisper y los pesos del modelo.
 
-La interfaz de ColVoice se valida principalmente con Windows y NVIDIA. Apple Silicon e Intel XPU son posibilidades del motor upstream, pero no forman parte de la ruta local comprobada de este repositorio.
+La interfaz comparte el mismo flujo en los tres sistemas. El instalador selecciona PyTorch CUDA cuando detecta NVIDIA y usa las ruedas portables en CPU o Apple Silicon.
 
-## Instalación recomendada en Windows
+## Instalación recomendada
 
-Abre PowerShell en la carpeta del repositorio y crea un entorno limpio:
+Desde la carpeta del repositorio ejecuta:
 
-```powershell
-py -3.10 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
+```bash
+python setup_colvoice.py
 ```
 
-Para NVIDIA con CUDA 12.8, instala PyTorch y las dependencias de ColVoice:
+El instalador crea `.venv`, instala PyTorch y el resto de dependencias, y descarga el modelo en `models/OmniVoice`. Puedes seleccionar el backend explícitamente:
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install torch==2.8.0+cu128 torchaudio==2.8.0+cu128 --extra-index-url https://download.pytorch.org/whl/cu128
-.\.venv\Scripts\python.exe -m pip install -r requirements-local.txt
+```bash
+python setup_colvoice.py --cuda
+python setup_colvoice.py --cpu
+python setup_colvoice.py --skip-model
 ```
 
 ### Alternativa con uv
 
 Si prefieres `uv`, crea el entorno y usa el mismo conjunto de dependencias:
 
-```powershell
+```bash
 uv venv .venv --python 3.10
-uv pip install --python .venv\Scripts\python.exe torch==2.8.0+cu128 torchaudio==2.8.0+cu128 --extra-index-url https://download.pytorch.org/whl/cu128
-uv pip install --python .venv\Scripts\python.exe -r requirements-local.txt
+uv pip install torch torchaudio
+uv pip install -r requirements-local.txt
 ```
 
 En ambos métodos el repositorio se descarga como ColVoice; `omnivoice` se conserva solo como nombre técnico del motor compatible.
 
 Descarga los pesos oficiales en la carpeta local `models/`:
 
-```powershell
-.\.venv\Scripts\python.exe download_models.py
+```bash
+python download_models.py
 ```
 
 El modelo no se guarda en Git porque sus archivos son grandes y tienen condiciones de uso propias. El script descarga desde la [fuente oficial de OmniVoice](https://huggingface.co/k2-fsa/OmniVoice).
 
-Inicia la aplicación:
+Inicia la aplicación con el launcher incluido en el repositorio y abre la dirección local que indique el proceso. Para integraciones automatizadas, comprueba primero:
 
-```powershell
-.\Iniciar-ColVoice.cmd
+```bash
+python colvoice_cli.py health
 ```
 
-Después abre `http://127.0.0.1:8001`. Para detenerla usa `Detener-ColVoice.cmd`.
+### CPU y Apple Silicon
 
-### CPU
+Usa `python setup_colvoice.py --cpu`. La generación es compatible, aunque tarda más durante la carga y la síntesis que la ruta NVIDIA.
 
-Si no tienes NVIDIA, instala las ruedas normales de PyTorch antes de instalar el resto:
+## Instalación con agentes
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install torch==2.8.0 torchaudio==2.8.0
-.\.venv\Scripts\python.exe -m pip install -r requirements-local.txt
-.\Iniciar-ColVoice.cmd -Device cpu
-```
-
-La generación en CPU es compatible, pero tarda más durante la carga y la síntesis.
+ChatGPT Codex, Claude Code y Antigravity pueden instalar ColVoice sin explorar el repositorio completo. Pídeles que lean primero [AGENT-SETUP.md](AGENT-SETUP.md), detecten el sistema y la GPU, ejecuten el instalador, validen la API y generen un WAV de prueba. El modelo puede ocupar varios gigabytes: el agente debe solicitar confirmación antes de descargarlo.
 
 ## Inicio rápido
 
@@ -170,7 +164,7 @@ Las etiquetas no verbales y las correcciones fonéticas pertenecen al motor upst
 ## Herramientas relacionadas
 
 - [README principal](README.md): resumen del producto y funciones.
-- [API para agentes](API.md): endpoints JSON compactos y comandos CLI para Codex o Claude Code.
+- [API para agentes](API.md): endpoints JSON compactos y comandos CLI para Codex, Claude Code y Antigravity.
 - [AGENTS.md](AGENTS.md): contexto operativo breve para evitar leer todo el código.
 - [Voice Changer](VOICE-CHANGER.md): conversión directa opcional con Seed-VC.
 - [Créditos y licencias](CREDITS.md): atribución, pesos y condiciones de redistribución.

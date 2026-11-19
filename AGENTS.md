@@ -4,12 +4,13 @@ Lee este archivo antes de explorar el repositorio. Evita leer `app/omnivoice/cli
 
 ## Usar ColVoice
 
-1. Inicia la app con `Iniciar-ColVoice.cmd`.
-2. Comprueba la conexión: `.\.venv\Scripts\python.exe colvoice_cli.py health`.
-3. Consulta voces: `.\.venv\Scripts\python.exe colvoice_cli.py voices list`.
-4. Genera audio con `colvoice_cli.py tts --voice "NOMBRE" --text "..." --output outputs\agente.wav`.
-5. Evalúa la pronunciación con `colvoice_cli.py evaluate --audio outputs\agente.wav --text "..."`.
-6. Consulta [API.md](API.md) para el contrato JSON.
+1. Si falta `.venv`, ejecuta `python setup_colvoice.py` y solicita confirmación antes de descargar los pesos.
+2. Inicia la app con el launcher disponible para el sistema.
+3. Comprueba la conexión: `python colvoice_cli.py health`.
+4. Consulta voces: `python colvoice_cli.py voices list`.
+5. Genera audio con `python colvoice_cli.py tts --voice "NOMBRE" --text "..." --output outputs/agente.wav`.
+6. Evalúa la pronunciación con `python colvoice_cli.py evaluate --audio outputs/agente.wav --text "..."`.
+7. Consulta [API.md](API.md) para el contrato JSON.
 
 ## Mapa mínimo
 
@@ -19,6 +20,7 @@ Lee este archivo antes de explorar el repositorio. Evita leer `app/omnivoice/cli
 - `voices/`: biblioteca privada local; no publicarla.
 - `outputs/`: resultados generados; no publicarlos.
 - `INSTALACION.md`: instalación y uso general.
+- `AGENT-SETUP.md`: flujo detallado para Codex, Claude Code y Antigravity.
 
 ## Reglas de cambios
 

@@ -1,6 +1,6 @@
 # ColVoice — Voz Colombiana
 
-Abre **Iniciar-ColVoice.cmd** con doble clic. El navegador se abre cuando el modelo termina de cargar.
+Instala ColVoice con `python setup_colvoice.py` y ejecuta el launcher disponible para tu sistema. El navegador se abre cuando el modelo termina de cargar. El proyecto funciona en Windows, Linux y macOS.
 
 Dirección: http://127.0.0.1:8001
 
@@ -15,7 +15,7 @@ La configuración local usa CUDA para generar la voz y CPU para codificar/decodi
 
 Voice Changer usa Seed-VC en `.venv-vc/`. Durante una conversión, ColVoice pasa temporalmente a la CPU para dejar la RTX disponible y vuelve a CUDA al terminar. Seed-VC utiliza características acústicas internas, pero no crea una transcripción ni genera la salida a partir de texto.
 
-Para usar solamente CPU, ejecuta `Iniciar-ColVoice.cmd -Device cpu` cuando no haya otra instancia abierta.
+Para usar solamente CPU, prepara el entorno con `python setup_colvoice.py --cpu`.
 
 Archivos:
 
@@ -27,6 +27,6 @@ Archivos:
 - `logs/server.log` y `logs/server.err`: registros de ejecución.
 - `installed-versions.txt`: versiones exactas instaladas.
 
-El servidor escucha únicamente en este equipo. Cerrar la pestaña del navegador no detiene el proceso. Para cerrarlo y liberar memoria, abre **Detener-ColVoice.cmd**.
+El servidor escucha únicamente en este equipo. Cerrar la pestaña del navegador no detiene el proceso; usa el launcher de detención incluido o finaliza el proceso de ColVoice desde tu sistema para liberar memoria.
 
 Instalación comprobada con `pip check`, respuesta HTTP 200 de la interfaz y generación de `outputs/prueba.wav` (2,9 segundos, 24 kHz) usando CUDA.

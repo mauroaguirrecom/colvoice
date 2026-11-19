@@ -1,5 +1,6 @@
-torch==2.8.0+cu128
-torchaudio==2.8.0+cu128
+# Install torch/torchaudio separately for the selected backend. This file is
+# intentionally platform-neutral so CPU, CUDA and Apple Silicon installations
+# can use the same command.
 transformers==5.3.0
 gradio==6.9.0
 numpy==2.4.3

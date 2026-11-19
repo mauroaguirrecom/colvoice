@@ -1,3 +1,3 @@
 # Claude Code
 
-Usa [AGENTS.md](AGENTS.md) como contexto operativo compacto y [API.md](API.md) para conectar Claude Code con ColVoice. Ejecuta `colvoice_cli.py health` antes de generar audio.
+Usa [AGENT-SETUP.md](AGENT-SETUP.md) y [AGENTS.md](AGENTS.md) como contexto compacto. Detecta el sistema, ejecuta `python setup_colvoice.py` si falta `.venv`, pide confirmación para descargar el modelo y ejecuta `python colvoice_cli.py health` antes de generar audio.

@@ -1,0 +1,5 @@
+# NVIDIA CUDA 12.8 backend for supported NVIDIA systems.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.8.0+cu128
+torchaudio==2.8.0+cu128
+-r requirements-local.txt
